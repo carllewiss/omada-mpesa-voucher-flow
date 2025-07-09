@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,7 +72,7 @@ const Index = () => {
                 </div>
                 <CardTitle className="text-2xl text-gray-800">Get Internet Access</CardTitle>
                 <CardDescription className="text-gray-600">
-                  Pay KSh 50 via M-Pesa for 24-hour unlimited internet access
+                  Pay KSh 30 via M-Pesa for 24-hour unlimited internet access
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -81,7 +80,7 @@ const Index = () => {
                 <div className="bg-gradient-to-r from-blue-50 to-green-50 p-4 rounded-lg border border-blue-100">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-gray-800">24-Hour Package</span>
-                    <span className="text-2xl font-bold text-green-600">KSh 50</span>
+                    <span className="text-2xl font-bold text-green-600">KSh 30</span>
                   </div>
                   <div className="flex items-center space-x-4 text-sm text-gray-600">
                     <div className="flex items-center space-x-1">
@@ -148,7 +147,7 @@ const Index = () => {
                     <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-semibold text-blue-600">2</span>
                     </div>
-                    <p>Complete payment of KSh 50 via M-Pesa</p>
+                    <p>Complete payment of KSh 30 via M-Pesa</p>
                   </div>
                   <div className="flex items-start space-x-3">
                     <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -167,7 +166,7 @@ const Index = () => {
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
         phoneNumber={phoneNumber}
-        amount={50}
+        amount={30}
         onSuccess={handlePaymentSuccess}
         onFailure={handlePaymentFailure}
         setPaymentStatus={setPaymentStatus}
