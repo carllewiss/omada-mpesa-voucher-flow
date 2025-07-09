@@ -1,0 +1,240 @@
+
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Loader2, CheckCircle, XCircle, Phone } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+
+interface PaymentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  phoneNumber: string;
+  amount: number;
+  onSuccess: (data: any) => void;
+  onFailure: () => void;
+  setPaymentStatus: (status: "idle" | "processing" | "success" | "failed") => void;
+}
+
+const PaymentModal = ({
+  isOpen,
+  onClose,
+  phoneNumber,
+  amount,
+  onSuccess,
+  onFailure,
+  setPaymentStatus,
+}: PaymentModalProps) => {
+  const [currentStep, setCurrentStep] = useState<"initiating" | "waiting" | "success" | "failed">("initiating");
+  const [countdown, setCountdown] = useState(120); // 2 minutes timeout
+  const [transactionId, setTransactionId] = useState("");
+
+  useEffect(() => {
+    if (isOpen) {
+      initiateMpesaPayment();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (currentStep === "waiting" && countdown > 0) {
+      interval = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    } else if (countdown === 0) {
+      handleTimeout();
+    }
+    return () => clearInterval(interval);
+  }, [currentStep, countdown]);
+
+  const initiateMpesaPayment = async () => {
+    try {
+      setPaymentStatus("processing");
+      setCurrentStep("initiating");
+      
+      // Simulate M-Pesa STK Push initiation
+      // In real implementation, call your M-Pesa API endpoint
+      const response = await fetch('/api/mpesa/initiate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber,
+          amount,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTransactionId(data.transactionId);
+        setCurrentStep("waiting");
+        pollPaymentStatus(data.transactionId);
+      } else {
+        throw new Error('Failed to initiate payment');
+      }
+    } catch (error) {
+      console.error('Payment initiation failed:', error);
+      setCurrentStep("failed");
+      toast({
+        title: "Payment Failed",
+        description: "Failed to initiate M-Pesa payment. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const pollPaymentStatus = async (txnId: string) => {
+    // Poll for payment status every 5 seconds
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/mpesa/status/${txnId}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          clearInterval(pollInterval);
+          setCurrentStep("success");
+          
+          // Authorize user on Omada controller
+          const authResponse = await authorizeUser(phoneNumber);
+          if (authResponse.success) {
+            onSuccess({
+              transactionId: txnId,
+              authorizationData: authResponse.data,
+              expiryTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+            });
+          } else {
+            throw new Error('Authorization failed');
+          }
+        } else if (data.status === 'failed' || data.status === 'cancelled') {
+          clearInterval(pollInterval);
+          setCurrentStep("failed");
+          onFailure();
+        }
+      } catch (error) {
+        console.error('Status check failed:', error);
+      }
+    }, 5000);
+
+    // Clear interval after 2 minutes
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      if (currentStep === "waiting") {
+        handleTimeout();
+      }
+    }, 120000);
+  };
+
+  const authorizeUser = async (phone: string) => {
+    try {
+      // Create Omada controller voucher and authorize user
+      const response = await fetch('/api/omada/authorize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber: phone,
+          duration: 24 * 60 * 60, // 24 hours in seconds
+          packageType: '24hour',
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data };
+      } else {
+        throw new Error('Authorization failed');
+      }
+    } catch (error) {
+      console.error('Authorization failed:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const handleTimeout = () => {
+    setCurrentStep("failed");
+    setPaymentStatus("failed");
+    toast({
+      title: "Payment Timeout",
+      description: "Payment request timed out. Please try again.",
+      variant: "destructive",
+    });
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-center">M-Pesa Payment</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6 py-4">
+          {currentStep === "initiating" && (
+            <div className="text-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin mx-auto text-blue-600" />
+              <div>
+                <h3 className="font-semibold text-lg">Initiating Payment</h3>
+                <p className="text-gray-600">Setting up your M-Pesa payment...</p>
+              </div>
+            </div>
+          )}
+
+          {currentStep === "waiting" && (
+            <div className="text-center space-y-4">
+              <Phone className="h-12 w-12 mx-auto text-green-600 animate-pulse" />
+              <div>
+                <h3 className="font-semibold text-lg">Check Your Phone</h3>
+                <p className="text-gray-600 mb-2">
+                  Enter your M-Pesa PIN to complete the payment of <strong>KSh {amount}</strong>
+                </p>
+                <p className="text-sm text-gray-500">
+                  Transaction ID: {transactionId}
+                </p>
+              </div>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <p className="text-orange-800 text-sm">
+                  ⏱️ Time remaining: <strong>{formatTime(countdown)}</strong>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {currentStep === "success" && (
+            <div className="text-center space-y-4">
+              <CheckCircle className="h-12 w-12 mx-auto text-green-600" />
+              <div>
+                <h3 className="font-semibold text-lg text-green-600">Payment Successful!</h3>
+                <p className="text-gray-600">
+                  Your internet access has been activated.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {currentStep === "failed" && (
+            <div className="text-center space-y-4">
+              <XCircle className="h-12 w-12 mx-auto text-red-600" />
+              <div>
+                <h3 className="font-semibold text-lg text-red-600">Payment Failed</h3>
+                <p className="text-gray-600">
+                  Please try again or contact support if the problem persists.
+                </p>
+              </div>
+              <Button onClick={onClose} variant="outline" className="w-full">
+                Try Again
+              </Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default PaymentModal;
