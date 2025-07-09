@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,7 @@ const Index = () => {
             <div className="flex items-center space-x-2">
               <Wifi className="h-8 w-8 text-blue-600" />
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-                Omada Portal
+                4K SMART SOLUTIONS
               </h1>
             </div>
             <div className="flex items-center space-x-4 text-sm text-gray-600">
