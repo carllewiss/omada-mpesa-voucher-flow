@@ -1,14 +1,14 @@
 # 4K SMART SOLUTIONS - Customization Guide
 
 ## Overview
-This application is a payment portal that allows users to pay for internet access via M-Pesa and automatically generates voucher codes for 24-hour internet access on Omada Controller software.
+This application is a payment portal that allows users to either pay for internet access via M-Pesa or redeem existing voucher codes for 24-hour internet access on Omada Controller software.
 
 ## Application Structure
 
 ### Core Components
 - **Payment Flow**: M-Pesa integration for collecting payments
-- **Voucher Generation**: Automatic voucher creation for Omada Controller
-- **User Interface**: Responsive React frontend with payment forms
+- **Voucher System**: Both voucher code redemption and automatic generation
+- **User Interface**: Responsive React frontend with payment forms and voucher input
 - **Authorization**: Real-time status display for internet access
 
 ## Customization Options
@@ -44,19 +44,37 @@ This application is a payment portal that allows users to pay for internet acces
   - Callback URLs
 
 #### Package Pricing
-- **File**: `src/pages/Index.tsx` (lines 95-104)
-- **Current**: KES 50 for 24 hours
+- **File**: `src/pages/Index.tsx` (lines 83-84)
+- **Current**: KES 30 for 24 hours
 - **Customize**: 
 ```tsx
-<CardDescription className="text-2xl font-bold text-green-600">
-  KES YOUR_PRICE
+<span className="text-2xl font-bold text-green-600">KSh YOUR_PRICE</span>
+<CardDescription className="text-gray-600">
+  Pay KSh YOUR_PRICE via M-Pesa for YOUR_DURATION unlimited internet access
 </CardDescription>
-<p className="text-gray-600">
-  Valid for YOUR_DURATION
-</p>
 ```
 
-### 3. Omada Controller Integration
+### 3. Voucher Code System
+
+#### Voucher Redemption
+- **File**: `src/pages/Index.tsx` (lines 18-30)
+- **Feature**: Users can enter existing voucher codes for instant access
+- **Customize validation logic**:
+```typescript
+const handleVoucherSubmit = () => {
+  // Add your voucher validation logic here
+  // Connect to your backend/database to verify voucher
+  if (isValidVoucher(voucherCode)) {
+    // Grant access
+  }
+};
+```
+
+#### Voucher Input UI
+- **Location**: `src/pages/Index.tsx` (lines 99-120)
+- **Customize**: Placeholder text, validation messages, button styling
+
+### 4. Omada Controller Integration
 
 #### API Configuration
 - **File**: `src/utils/omadaApi.ts`
@@ -66,7 +84,7 @@ This application is a payment portal that allows users to pay for internet acces
   - Voucher generation parameters
   - Duration settings (currently 24 hours)
 
-#### Voucher Customization
+#### Voucher Generation
 ```typescript
 // Modify voucher generation parameters
 const voucherConfig = {
@@ -76,7 +94,7 @@ const voucherConfig = {
 };
 ```
 
-### 4. UI/UX Customization
+### 5. UI/UX Customization
 
 #### Color Scheme
 - **File**: `src/index.css`
@@ -95,39 +113,70 @@ const voucherConfig = {
 
 #### Logo/Icons
 - Replace the Wifi icon with your company logo
-- **Location**: `src/pages/Index.tsx` (line 48)
+- **Location**: `src/pages/Index.tsx` (line 48, 72)
 ```tsx
 <YourLogo className="h-8 w-8 text-blue-600" />
 ```
 
-### 5. Content Customization
+#### Voucher Code Section Styling
+- **Customize**: Input field appearance, button styling, divider text
+- **Location**: `src/pages/Index.tsx` (lines 99-127)
+```tsx
+// Customize the "Or pay with M-Pesa" divider text
+<span className="bg-white px-2 text-gray-500">YOUR_DIVIDER_TEXT</span>
+```
+
+### 6. Content Customization
 
 #### Welcome Message
-- **File**: `src/pages/Index.tsx` (lines 85-94)
+- **File**: `src/pages/Index.tsx` (lines 74-77)
 - **Customize**: Welcome text and package description
 
+#### Voucher Code Messages
+- **File**: `src/pages/Index.tsx` (lines 115-117)
+- **Customize**: Helper text and validation messages
+```tsx
+<p className="text-xs text-gray-500">
+  YOUR_CUSTOM_VOUCHER_INSTRUCTION_TEXT
+</p>
+```
+
 #### How It Works Section
-- **File**: `src/pages/Index.tsx` (lines 125-160)
-- **Modify**: Steps description to match your process
+- **File**: `src/pages/Index.tsx` (lines 155-180)
+- **Modify**: Steps description to match your process (now includes voucher option)
 
 #### Success/Error Messages
-- **Locations**: Throughout payment flow components
-- **Customize**: User feedback messages
+- **Locations**: Throughout payment flow components and voucher validation
+- **Customize**: User feedback messages for both payment and voucher scenarios
 
-### 6. Backend Integration (Recommended)
+### 7. Backend Integration (Recommended)
 
 For production deployment, integrate with Supabase for:
 
 #### Secure API Management
 - Store M-Pesa and Omada credentials securely
 - Handle payment processing server-side
-- Generate vouchers through edge functions
+- Generate and validate vouchers through edge functions
 
 #### Database Features
 - Payment history tracking
 - User management
+- Voucher code management and validation
 - Voucher usage analytics
 - Transaction logging
+
+#### Voucher System Database Schema
+```sql
+-- Example voucher table structure
+CREATE TABLE vouchers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code VARCHAR(20) UNIQUE NOT NULL,
+  is_used BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT now(),
+  used_at TIMESTAMP,
+  expires_at TIMESTAMP NOT NULL
+);
+```
 
 #### Setup Steps
 1. Click the green Supabase button in Lovable
@@ -135,12 +184,13 @@ For production deployment, integrate with Supabase for:
    - M-Pesa payment processing
    - Omada Controller API calls
    - Voucher generation and validation
+   - Voucher code verification
 
-### 7. Phone Number Validation
+### 8. Phone Number Validation
 
 #### Customize Validation Rules
-- **File**: `src/pages/Index.tsx` (line 18)
-- **Current**: Basic Kenyan number format
+- **File**: `src/pages/Index.tsx` (line 32)
+- **Current**: Basic length validation (minimum 10 characters)
 - **Modify**: For your country/format
 ```typescript
 const phoneRegex = /^YOUR_PHONE_PATTERN$/;
@@ -149,7 +199,7 @@ if (!phoneRegex.test(phoneNumber)) {
 }
 ```
 
-### 8. Deployment Configuration
+### 9. Deployment Configuration
 
 #### Environment Variables (via Supabase)
 ```
@@ -158,33 +208,60 @@ MPESA_CONSUMER_SECRET=your_secret
 OMADA_CONTROLLER_URL=your_controller_ip
 OMADA_USERNAME=your_username
 OMADA_PASSWORD=your_password
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_key
 ```
 
 #### Custom Domain
 - Configure in Lovable Project Settings
 - Update CORS settings for your domain
 
-### 9. Advanced Customizations
+### 10. Advanced Customizations
+
+#### Dual Access Methods
+The application now supports both payment and voucher code access:
+```tsx
+// Customize the access options layout
+const AccessOptions = () => (
+  <div>
+    <VoucherCodeInput />
+    <PaymentDivider />
+    <PaymentForm />
+  </div>
+);
+```
 
 #### Multiple Package Options
 Add different duration/price packages:
 ```tsx
 const packages = [
-  { name: "1 Hour", price: 20, duration: 1 },
-  { name: "24 Hours", price: 50, duration: 24 },
-  { name: "7 Days", price: 300, duration: 168 }
+  { name: "1 Hour", price: 10, duration: 1 },
+  { name: "24 Hours", price: 30, duration: 24 },
+  { name: "7 Days", price: 200, duration: 168 }
 ];
+```
+
+#### Voucher Code Generation Patterns
+```typescript
+// Customize voucher code format
+const generateVoucherCode = () => {
+  const prefix = "4KSS"; // Your prefix
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 6);
+  return `${prefix}-${timestamp}-${random}`.toUpperCase();
+};
 ```
 
 #### Multi-language Support
 - Add language toggle
 - Create translation files
-- Update all text content
+- Update all text content including voucher-related text
 
 #### Analytics Integration
 - Add Google Analytics
 - Track payment conversions
-- Monitor voucher usage
+- Monitor voucher usage and redemption rates
+- Track conversion between voucher and payment methods
 
 ## Security Considerations
 
@@ -202,10 +279,12 @@ npm install
 npm run dev
 ```
 
-### Payment Testing
-- Use M-Pesa sandbox credentials
+### Payment & Voucher Testing
+- Use M-Pesa sandbox credentials for payment testing
 - Test voucher generation with Omada test environment
-- Verify all error handling scenarios
+- Test voucher code validation and redemption flow
+- Verify all error handling scenarios for both payment and voucher paths
+- Test the UI flow between voucher entry and payment options
 
 ## Support & Maintenance
 
@@ -216,8 +295,10 @@ npm run dev
 
 ### Monitoring
 - Set up payment failure alerts
-- Monitor voucher generation success rates
-- Track user experience metrics
+- Monitor voucher generation and validation success rates
+- Track voucher code redemption patterns
+- Monitor user preference between payment vs voucher access
+- Track user experience metrics for both access methods
 
 ## Getting Help
 
