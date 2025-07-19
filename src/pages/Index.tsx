@@ -4,16 +4,43 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wifi, Clock, Shield, CreditCard } from "lucide-react";
+import { Wifi, Clock, Shield, CreditCard, Ticket } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import PaymentModal from "@/components/PaymentModal";
 import AuthorizationStatus from "@/components/AuthorizationStatus";
 
 const Index = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [voucherCode, setVoucherCode] = useState("");
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "processing" | "success" | "failed">("idle");
   const [authorizationData, setAuthorizationData] = useState<any>(null);
+
+  const handleVoucherSubmit = () => {
+    if (!voucherCode.trim()) {
+      toast({
+        title: "Invalid Voucher Code",
+        description: "Please enter a valid voucher code",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Here you would typically validate the voucher code with your backend
+    toast({
+      title: "Voucher Redeemed",
+      description: "Your voucher code has been successfully redeemed!",
+    });
+    
+    // Simulate successful voucher redemption
+    setPaymentStatus("success");
+    setAuthorizationData({
+      voucher_code: voucherCode,
+      username: `voucher_${voucherCode}`,
+      password: Math.random().toString(36).substring(2, 15),
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    });
+  };
 
   const handlePayment = () => {
     if (!phoneNumber || phoneNumber.length < 10) {
@@ -92,6 +119,43 @@ const Index = () => {
                       <Wifi className="h-4 w-4" />
                       <span>Unlimited</span>
                     </div>
+                  </div>
+                </div>
+
+                {/* Voucher Code Input */}
+                <div className="space-y-2">
+                  <Label htmlFor="voucher" className="text-gray-700">
+                    Voucher Code (Optional)
+                  </Label>
+                  <div className="flex space-x-2">
+                    <Input
+                      id="voucher"
+                      type="text"
+                      placeholder="Enter voucher code"
+                      value={voucherCode}
+                      onChange={(e) => setVoucherCode(e.target.value)}
+                      className="border-blue-200 focus:border-blue-400"
+                    />
+                    <Button
+                      onClick={handleVoucherSubmit}
+                      variant="outline"
+                      className="px-4 border-blue-200 hover:bg-blue-50"
+                      disabled={!voucherCode.trim()}
+                    >
+                      <Ticket className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Have a voucher code? Enter it above to get instant access
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-gray-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-gray-500">Or pay with M-Pesa</span>
                   </div>
                 </div>
 
