@@ -30,14 +30,14 @@ export interface MpesaStatusResponse {
   };
 }
 
-// Configuration - In production, these should be environment variables
+// Configuration - Using Daraja API Sandbox credentials
 const MPESA_CONFIG = {
-  consumerKey: process.env.MPESA_CONSUMER_KEY || '',
-  consumerSecret: process.env.MPESA_CONSUMER_SECRET || '',
-  businessShortCode: process.env.MPESA_BUSINESS_SHORTCODE || '174379',
-  passkey: process.env.MPESA_PASSKEY || '',
-  callbackUrl: process.env.MPESA_CALLBACK_URL || 'https://your-domain.com/api/mpesa/callback',
-  environment: process.env.MPESA_ENVIRONMENT || 'sandbox', // 'sandbox' or 'production'
+  consumerKey: 'V6b55cpLtdRGb03iPNOqLyLu3TDUNAAWfLUIIvBGEYzqadsE',
+  consumerSecret: 'ES8Iutab3w8vRwH6AwqrLa2wneERGyGlAlQf5hQMRE7SqjjwXERg2rB7IlQrWRjr',
+  businessShortCode: '174379', // Default sandbox shortcode
+  passkey: 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919', // Default sandbox passkey
+  callbackUrl: 'https://your-domain.com/api/mpesa/callback',
+  environment: 'sandbox', // Using sandbox environment
 };
 
 // Generate OAuth token for M-Pesa API
