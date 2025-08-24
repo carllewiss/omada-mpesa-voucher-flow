@@ -2,8 +2,10 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle, XCircle, Phone } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, Phone, Ticket } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import VoucherGenerationModal from "./VoucherGenerationModal";
+import { VoucherData } from "./VoucherCard";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -24,9 +26,11 @@ const PaymentModal = ({
   onFailure,
   setPaymentStatus,
 }: PaymentModalProps) => {
-  const [currentStep, setCurrentStep] = useState<"initiating" | "waiting" | "success" | "failed">("initiating");
+  const [currentStep, setCurrentStep] = useState<"initiating" | "waiting" | "success" | "voucher" | "failed">("initiating");
   const [countdown, setCountdown] = useState(120); // 2 minutes timeout
   const [transactionId, setTransactionId] = useState("");
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [generatedVoucher, setGeneratedVoucher] = useState<VoucherData | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -94,17 +98,11 @@ const PaymentModal = ({
           clearInterval(pollInterval);
           setCurrentStep("success");
           
-          // Authorize user on Omada controller
-          const authResponse = await authorizeUser(phoneNumber);
-          if (authResponse.success) {
-            onSuccess({
-              transactionId: txnId,
-              authorizationData: authResponse.data,
-              expiryTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
-            });
-          } else {
-            throw new Error('Authorization failed');
-          }
+          // Start voucher generation process
+          setTimeout(() => {
+            setCurrentStep("voucher");
+            setShowVoucherModal(true);
+          }, 2000); // Show success for 2 seconds before voucher generation
         } else if (data.status === 'failed' || data.status === 'cancelled') {
           clearInterval(pollInterval);
           setCurrentStep("failed");
@@ -161,6 +159,24 @@ const PaymentModal = ({
     });
   };
 
+  const handleVoucherGenerated = (voucher: VoucherData) => {
+    setGeneratedVoucher(voucher);
+    setShowVoucherModal(false);
+    
+    // Pass the voucher data to the parent success handler
+    onSuccess({
+      transactionId,
+      voucherData: voucher,
+      authorizationData: {
+        username: voucher.username,
+        password: voucher.password,
+        voucher_code: voucher.code,
+        expires_at: voucher.expiresAt,
+      },
+      expiryTime: new Date(voucher.expiresAt),
+    });
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -211,7 +227,25 @@ const PaymentModal = ({
               <div>
                 <h3 className="font-semibold text-lg text-green-600">Payment Successful!</h3>
                 <p className="text-gray-600">
-                  Your internet access has been activated.
+                  Preparing your voucher...
+                </p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <p className="text-green-800 text-sm flex items-center justify-center">
+                  <Ticket className="h-4 w-4 mr-2" />
+                  Generating internet access voucher automatically
+                </p>
+              </div>
+            </div>
+          )}
+
+          {currentStep === "voucher" && (
+            <div className="text-center space-y-4">
+              <Loader2 className="h-12 w-12 mx-auto text-blue-600 animate-spin" />
+              <div>
+                <h3 className="font-semibold text-lg text-blue-600">Generating Voucher</h3>
+                <p className="text-gray-600">
+                  Creating your personalized internet access voucher...
                 </p>
               </div>
             </div>
@@ -233,6 +267,16 @@ const PaymentModal = ({
           )}
         </div>
       </DialogContent>
+
+      {/* Voucher Generation Modal */}
+      <VoucherGenerationModal
+        isOpen={showVoucherModal}
+        onClose={() => setShowVoucherModal(false)}
+        transactionId={transactionId}
+        phoneNumber={phoneNumber}
+        amount={amount}
+        onVoucherGenerated={handleVoucherGenerated}
+      />
     </Dialog>
   );
 };

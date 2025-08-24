@@ -2,14 +2,16 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Clock, Wifi, RefreshCw } from "lucide-react";
+import { CheckCircle, Clock, Wifi, RefreshCw, Ticket } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import VoucherCard, { VoucherData } from "./VoucherCard";
 
 interface AuthorizationStatusProps {
   data: {
     transactionId: string;
     authorizationData: any;
     expiryTime: Date;
+    voucherData?: VoucherData;
   };
 }
 
@@ -98,6 +100,47 @@ const AuthorizationStatus = ({ data }: AuthorizationStatusProps) => {
     window.location.reload();
   };
 
+  // If we have voucher data, show the voucher card display
+  if (data.voucherData) {
+    return (
+      <div className="max-w-md mx-auto space-y-6">
+        <div className="text-center">
+          <div className="mx-auto mb-4 w-16 h-16 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center">
+            <Ticket className="h-8 w-8 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-green-700 mb-2">Voucher Generated!</h2>
+          <p className="text-gray-600">
+            Your payment was successful and your voucher has been automatically generated.
+          </p>
+        </div>
+        
+        <VoucherCard voucher={data.voucherData} showActions={true} />
+        
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="font-medium text-blue-800 mb-2">Quick Setup Guide:</h3>
+          <ol className="text-sm text-blue-700 space-y-1">
+            <li>1. Connect to the Wi-Fi network</li>
+            <li>2. Open any website in your browser</li>
+            <li>3. Use the login credentials above</li>
+            <li>4. Start browsing immediately!</li>
+          </ol>
+        </div>
+        
+        <div className="text-center">
+          <Button
+            onClick={() => window.location.reload()}
+            variant="outline"
+            className="border-blue-200 hover:bg-blue-50"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            New Session
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy display for non-voucher data
   return (
     <div className="max-w-md mx-auto space-y-6">
       {/* Status Card */}
@@ -171,34 +214,34 @@ const AuthorizationStatus = ({ data }: AuthorizationStatusProps) => {
             </>
           )}
         </CardContent>
-      </Card>
-
-      {/* Usage Tips */}
-      {!isExpired && (
-        <Card className="bg-white/90 backdrop-blur-sm border-blue-200">
-          <CardHeader>
-            <CardTitle className="text-center text-lg text-gray-800">Usage Tips</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 text-sm text-gray-600">
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
-                <p>Keep this page open to monitor your remaining time</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
-                <p>Your session will automatically expire after 24 hours</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
-                <p>If you lose connection, use the refresh button above</p>
-              </div>
-            </div>
-          </CardContent>
         </Card>
-      )}
-    </div>
-  );
+
+        {/* Usage Tips */}
+        {!isExpired && (
+          <Card className="bg-white/90 backdrop-blur-sm border-blue-200">
+            <CardHeader>
+              <CardTitle className="text-center text-lg text-gray-800">Usage Tips</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 text-sm text-gray-600">
+                <div className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <p>Keep this page open to monitor your remaining time</p>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <p>Your session will automatically expire after 24 hours</p>
+                </div>
+                <div className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
+                  <p>If you lose connection, use the refresh button above</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
 };
 
 export default AuthorizationStatus;
