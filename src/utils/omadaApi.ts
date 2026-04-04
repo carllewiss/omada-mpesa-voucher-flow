@@ -36,11 +36,11 @@ export interface OmadaVoucher {
 
 // Configuration - In production, these should be environment variables
 const OMADA_CONFIG = {
-  controllerUrl: process.env.OMADA_CONTROLLER_URL || 'https://192.168.1.1:8443',
-  username: process.env.OMADA_USERNAME || 'admin',
-  password: process.env.OMADA_PASSWORD || 'admin',
-  siteId: process.env.OMADA_SITE_ID || 'Default',
-  omadacId: process.env.OMADA_OMADAC_ID || '',
+  controllerUrl: 'https://192.168.1.1:8443',
+  username: 'admin',
+  password: 'admin',
+  siteId: 'Default',
+  omadacId: '',
 };
 
 // Login to Omada controller and get session token
