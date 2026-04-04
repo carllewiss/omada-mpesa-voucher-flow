@@ -80,9 +80,8 @@ const PaymentModal = ({
   const pollPaymentStatus = (reqId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const res = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/mpesa-status?checkoutRequestId=${reqId}`,
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mpesa-status?checkoutRequestId=${reqId}`,
           { headers: { "Content-Type": "application/json" } }
         );
         const statusData = await res.json();
