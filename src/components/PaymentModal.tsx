@@ -39,7 +39,7 @@ const PaymentModal = ({
   }, [isOpen]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (currentStep === "waiting" && countdown > 0) {
       interval = setInterval(() => {
         setCountdown((prev) => prev - 1);
