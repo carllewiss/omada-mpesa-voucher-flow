@@ -1,4 +1,7 @@
-import { corsHeaders } from '@supabase/supabase-js/cors';
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
 
 const MPESA_CONSUMER_KEY = Deno.env.get('MPESA_CONSUMER_KEY')!;
