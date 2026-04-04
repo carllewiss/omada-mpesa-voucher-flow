@@ -1,9 +1,9 @@
-
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, XCircle, Phone, Ticket } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import VoucherGenerationModal from "./VoucherGenerationModal";
 import { VoucherData } from "./VoucherCard";
 
@@ -27,13 +27,14 @@ const PaymentModal = ({
   setPaymentStatus,
 }: PaymentModalProps) => {
   const [currentStep, setCurrentStep] = useState<"initiating" | "waiting" | "success" | "voucher" | "failed">("initiating");
-  const [countdown, setCountdown] = useState(120); // 2 minutes timeout
-  const [transactionId, setTransactionId] = useState("");
+  const [countdown, setCountdown] = useState(120);
+  const [checkoutRequestId, setCheckoutRequestId] = useState("");
   const [showVoucherModal, setShowVoucherModal] = useState(false);
-  const [generatedVoucher, setGeneratedVoucher] = useState<VoucherData | null>(null);
 
   useEffect(() => {
     if (isOpen) {
+      setCurrentStep("initiating");
+      setCountdown(120);
       initiateMpesaPayment();
     }
   }, [isOpen]);
@@ -41,11 +42,11 @@ const PaymentModal = ({
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (currentStep === "waiting" && countdown > 0) {
-      interval = setInterval(() => {
-        setCountdown((prev) => prev - 1);
-      }, 1000);
-    } else if (countdown === 0) {
-      handleTimeout();
+      interval = setInterval(() => setCountdown((prev) => prev - 1), 1000);
+    } else if (countdown === 0 && currentStep === "waiting") {
+      setCurrentStep("failed");
+      setPaymentStatus("failed");
+      toast({ title: "Payment Timeout", description: "Payment request timed out. Please try again.", variant: "destructive" });
     }
     return () => clearInterval(interval);
   }, [currentStep, countdown]);
@@ -53,119 +54,69 @@ const PaymentModal = ({
   const initiateMpesaPayment = async () => {
     try {
       setPaymentStatus("processing");
-      setCurrentStep("initiating");
-      
-      // Simulate M-Pesa STK Push initiation
-      // In real implementation, call your M-Pesa API endpoint
-      const response = await fetch('/api/mpesa/initiate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phoneNumber,
-          amount,
-        }),
+
+      const packageType = amount === 10 ? "2hour" : "24hour";
+
+      const { data, error } = await supabase.functions.invoke("mpesa-stk-push", {
+        body: { phoneNumber, amount, packageType },
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setTransactionId(data.transactionId);
+      if (error) throw error;
+
+      if (data?.success) {
+        setCheckoutRequestId(data.checkoutRequestId);
         setCurrentStep("waiting");
-        pollPaymentStatus(data.transactionId);
+        pollPaymentStatus(data.checkoutRequestId);
       } else {
-        throw new Error('Failed to initiate payment');
+        throw new Error(data?.error || "Failed to initiate payment");
       }
-    } catch (error) {
-      console.error('Payment initiation failed:', error);
+    } catch (error: any) {
+      console.error("Payment initiation failed:", error);
       setCurrentStep("failed");
-      toast({
-        title: "Payment Failed",
-        description: "Failed to initiate M-Pesa payment. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Payment Failed", description: error.message || "Failed to initiate M-Pesa payment.", variant: "destructive" });
     }
   };
 
-  const pollPaymentStatus = async (txnId: string) => {
-    // Poll for payment status every 5 seconds
+  const pollPaymentStatus = (reqId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/mpesa/status/${txnId}`);
-        const data = await response.json();
-        
-        if (data.status === 'success') {
+        const { data, error } = await supabase.functions.invoke("mpesa-status", {
+          body: {},
+          headers: {},
+        });
+
+        // Use fetch directly with query params since supabase.functions.invoke doesn't support query params well
+        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const res = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/mpesa-status?checkoutRequestId=${reqId}`,
+          { headers: { "Content-Type": "application/json" } }
+        );
+        const statusData = await res.json();
+
+        if (statusData.status === "success") {
           clearInterval(pollInterval);
           setCurrentStep("success");
-          
-          // Start voucher generation process
           setTimeout(() => {
             setCurrentStep("voucher");
             setShowVoucherModal(true);
-          }, 2000); // Show success for 2 seconds before voucher generation
-        } else if (data.status === 'failed' || data.status === 'cancelled') {
+          }, 2000);
+        } else if (statusData.status === "failed" || statusData.status === "cancelled") {
           clearInterval(pollInterval);
           setCurrentStep("failed");
           onFailure();
         }
-      } catch (error) {
-        console.error('Status check failed:', error);
+      } catch (err) {
+        console.error("Status check failed:", err);
       }
     }, 5000);
 
-    // Clear interval after 2 minutes
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      if (currentStep === "waiting") {
-        handleTimeout();
-      }
-    }, 120000);
-  };
-
-  const authorizeUser = async (phone: string) => {
-    try {
-      // Create Omada controller voucher and authorize user
-      const response = await fetch('/api/omada/authorize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phoneNumber: phone,
-          duration: 24 * 60 * 60, // 24 hours in seconds
-          packageType: '24hour',
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return { success: true, data };
-      } else {
-        throw new Error('Authorization failed');
-      }
-    } catch (error) {
-      console.error('Authorization failed:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
-  const handleTimeout = () => {
-    setCurrentStep("failed");
-    setPaymentStatus("failed");
-    toast({
-      title: "Payment Timeout",
-      description: "Payment request timed out. Please try again.",
-      variant: "destructive",
-    });
+    setTimeout(() => clearInterval(pollInterval), 120000);
   };
 
   const handleVoucherGenerated = (voucher: VoucherData) => {
-    setGeneratedVoucher(voucher);
     setShowVoucherModal(false);
-    
-    // Pass the voucher data to the parent success handler
     onSuccess({
-      transactionId,
+      checkoutRequestId,
       voucherData: voucher,
       authorizationData: {
         username: voucher.username,
@@ -180,7 +131,7 @@ const PaymentModal = ({
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   return (
@@ -189,14 +140,14 @@ const PaymentModal = ({
         <DialogHeader>
           <DialogTitle className="text-center">M-Pesa Payment</DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-6 py-4">
           {currentStep === "initiating" && (
             <div className="text-center space-y-4">
               <Loader2 className="h-12 w-12 animate-spin mx-auto text-blue-600" />
               <div>
                 <h3 className="font-semibold text-lg">Initiating Payment</h3>
-                <p className="text-gray-600">Setting up your M-Pesa payment...</p>
+                <p className="text-gray-600">Sending STK push to your phone...</p>
               </div>
             </div>
           )}
@@ -208,9 +159,6 @@ const PaymentModal = ({
                 <h3 className="font-semibold text-lg">Check Your Phone</h3>
                 <p className="text-gray-600 mb-2">
                   Enter your M-Pesa PIN to complete the payment of <strong>KSh {amount}</strong>
-                </p>
-                <p className="text-sm text-gray-500">
-                  Transaction ID: {transactionId}
                 </p>
               </div>
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
@@ -226,9 +174,7 @@ const PaymentModal = ({
               <CheckCircle className="h-12 w-12 mx-auto text-green-600" />
               <div>
                 <h3 className="font-semibold text-lg text-green-600">Payment Successful!</h3>
-                <p className="text-gray-600">
-                  Preparing your voucher...
-                </p>
+                <p className="text-gray-600">Preparing your voucher...</p>
               </div>
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <p className="text-green-800 text-sm flex items-center justify-center">
@@ -244,9 +190,7 @@ const PaymentModal = ({
               <Loader2 className="h-12 w-12 mx-auto text-blue-600 animate-spin" />
               <div>
                 <h3 className="font-semibold text-lg text-blue-600">Generating Voucher</h3>
-                <p className="text-gray-600">
-                  Creating your personalized internet access voucher...
-                </p>
+                <p className="text-gray-600">Creating your internet access voucher...</p>
               </div>
             </div>
           )}
@@ -256,9 +200,7 @@ const PaymentModal = ({
               <XCircle className="h-12 w-12 mx-auto text-red-600" />
               <div>
                 <h3 className="font-semibold text-lg text-red-600">Payment Failed</h3>
-                <p className="text-gray-600">
-                  Please try again or contact support if the problem persists.
-                </p>
+                <p className="text-gray-600">Please try again or contact support.</p>
               </div>
               <Button onClick={onClose} variant="outline" className="w-full">
                 Try Again
@@ -268,11 +210,10 @@ const PaymentModal = ({
         </div>
       </DialogContent>
 
-      {/* Voucher Generation Modal */}
       <VoucherGenerationModal
         isOpen={showVoucherModal}
         onClose={() => setShowVoucherModal(false)}
-        transactionId={transactionId}
+        transactionId={checkoutRequestId}
         phoneNumber={phoneNumber}
         amount={amount}
         onVoucherGenerated={handleVoucherGenerated}
