@@ -4,14 +4,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wifi, Clock, Shield, CreditCard, Ticket } from "lucide-react";
+import { Wifi, Clock, Shield, CreditCard, Ticket, Check } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import PaymentModal from "@/components/PaymentModal";
 import AuthorizationStatus from "@/components/AuthorizationStatus";
 
+interface Package {
+  id: string;
+  name: string;
+  duration: string;
+  durationHours: number;
+  price: number;
+}
+
+const packages: Package[] = [
+  { id: "2hour", name: "2-Hour Package", duration: "2 Hours", durationHours: 2, price: 10 },
+  { id: "24hour", name: "24-Hour Package", duration: "24 Hours", durationHours: 24, price: 30 },
+];
+
 const Index = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [voucherCode, setVoucherCode] = useState("");
+  const [selectedPackage, setSelectedPackage] = useState<Package>(packages[0]);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "processing" | "success" | "failed">("idle");
   const [authorizationData, setAuthorizationData] = useState<any>(null);
@@ -26,19 +40,17 @@ const Index = () => {
       return;
     }
     
-    // Here you would typically validate the voucher code with your backend
     toast({
       title: "Voucher Redeemed",
       description: "Your voucher code has been successfully redeemed!",
     });
     
-    // Simulate successful voucher redemption
     setPaymentStatus("success");
     setAuthorizationData({
       voucher_code: voucherCode,
       username: `voucher_${voucherCode}`,
       password: Math.random().toString(36).substring(2, 15),
-      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + selectedPackage.durationHours * 60 * 60 * 1000).toISOString(),
     });
   };
 
@@ -100,25 +112,37 @@ const Index = () => {
                 </div>
                 <CardTitle className="text-2xl text-gray-800">Get Internet Access</CardTitle>
                 <CardDescription className="text-gray-600">
-                  Pay KSh 30 via M-Pesa for 24-hour unlimited internet access
+                  Choose a package and pay via M-Pesa
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Package Details */}
-                <div className="bg-gradient-to-r from-blue-50 to-green-50 p-4 rounded-lg border border-blue-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-gray-800">24-Hour Package</span>
-                    <span className="text-2xl font-bold text-green-600">KSh 30</span>
-                  </div>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600">
-                    <div className="flex items-center space-x-1">
-                      <Clock className="h-4 w-4" />
-                      <span>24 Hours</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <Wifi className="h-4 w-4" />
-                      <span>Unlimited</span>
-                    </div>
+                {/* Package Selection */}
+                <div className="space-y-3">
+                  <Label className="text-gray-700 font-semibold">Select Package</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {packages.map((pkg) => (
+                      <button
+                        key={pkg.id}
+                        onClick={() => setSelectedPackage(pkg)}
+                        className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+                          selectedPackage.id === pkg.id
+                            ? "border-green-500 bg-green-50 shadow-md"
+                            : "border-gray-200 bg-white hover:border-blue-300"
+                        }`}
+                      >
+                        {selectedPackage.id === pkg.id && (
+                          <div className="absolute top-2 right-2 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                            <Check className="h-3 w-3 text-white" />
+                          </div>
+                        )}
+                        <div className="text-2xl font-bold text-green-600">KSh {pkg.price}</div>
+                        <div className="font-medium text-gray-800 text-sm mt-1">{pkg.name}</div>
+                        <div className="flex items-center space-x-1 text-xs text-gray-500 mt-1">
+                          <Clock className="h-3 w-3" />
+                          <span>{pkg.duration}</span>
+                        </div>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -184,7 +208,9 @@ const Index = () => {
                   disabled={paymentStatus === "processing"}
                 >
                   <CreditCard className="h-5 w-5 mr-2" />
-                  {paymentStatus === "processing" ? "Processing..." : "Pay with M-Pesa"}
+                  {paymentStatus === "processing"
+                    ? "Processing..."
+                    : `Pay KSh ${selectedPackage.price} - ${selectedPackage.name}`}
                 </Button>
 
                 {paymentStatus === "failed" && (
@@ -206,19 +232,19 @@ const Index = () => {
                     <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-semibold text-blue-600">1</span>
                     </div>
-                    <p>Enter your M-Pesa registered phone number</p>
+                    <p>Choose your preferred internet package</p>
                   </div>
                   <div className="flex items-start space-x-3">
                     <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-semibold text-blue-600">2</span>
                     </div>
-                    <p>Complete payment of KSh 30 via M-Pesa</p>
+                    <p>Enter your M-Pesa number and complete payment</p>
                   </div>
                   <div className="flex items-start space-x-3">
                     <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-semibold text-blue-600">3</span>
                     </div>
-                    <p>Get instant internet access for 24 hours</p>
+                    <p>Get instant internet access with your voucher</p>
                   </div>
                 </div>
               </CardContent>
@@ -231,7 +257,7 @@ const Index = () => {
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
         phoneNumber={phoneNumber}
-        amount={30}
+        amount={selectedPackage.price}
         onSuccess={handlePaymentSuccess}
         onFailure={handlePaymentFailure}
         setPaymentStatus={setPaymentStatus}
