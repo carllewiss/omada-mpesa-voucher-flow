@@ -80,13 +80,7 @@ const PaymentModal = ({
   const pollPaymentStatus = (reqId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("mpesa-status", {
-          body: {},
-          headers: {},
-        });
-
-        // Use fetch directly with query params since supabase.functions.invoke doesn't support query params well
-        const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const res = await fetch(
           `https://${projectId}.supabase.co/functions/v1/mpesa-status?checkoutRequestId=${reqId}`,
           { headers: { "Content-Type": "application/json" } }
