@@ -50,7 +50,9 @@ const Index = () => {
     });
   }, []);
 
-  const handleVoucherSubmit = () => {
+  const [isRedeemingVoucher, setIsRedeemingVoucher] = useState(false);
+
+  const handleVoucherSubmit = async () => {
     if (!voucherCode.trim()) {
       toast({
         title: "Invalid Voucher Code",
@@ -59,19 +61,52 @@ const Index = () => {
       });
       return;
     }
-    
-    toast({
-      title: "Voucher Redeemed",
-      description: "Your voucher code has been successfully redeemed!",
-    });
-    
-    setPaymentStatus("success");
-    setAuthorizationData({
-      voucher_code: voucherCode,
-      username: `voucher_${voucherCode}`,
-      password: Math.random().toString(36).substring(2, 15),
-      expires_at: new Date(Date.now() + selectedPackage.durationHours * 60 * 60 * 1000).toISOString(),
-    });
+
+    setIsRedeemingVoucher(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('redeem-voucher', {
+        body: {
+          code: voucherCode.trim(),
+          clientMac: omadaParams.clientMac || null,
+          clientIp: omadaParams.clientIp || null,
+          apMac: omadaParams.apMac || null,
+          ssid: omadaParams.ssid || null,
+        },
+      });
+
+      if (error || !data?.success) {
+        toast({
+          title: "Invalid Voucher",
+          description: data?.error || "Voucher code is invalid or already used.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Voucher Redeemed!",
+        description: `Your ${data.voucher.duration_hours}-hour access is being activated.`,
+      });
+
+      setPaymentStatus("success");
+      setAuthorizationData({
+        transactionId: `VOUCHER-${data.voucher.code}`,
+        voucherData: {
+          code: data.voucher.code,
+          duration: `${data.voucher.duration_hours} Hours`,
+          package: data.voucher.package_type,
+        },
+        expiryTime: new Date(Date.now() + data.voucher.duration_hours * 60 * 60 * 1000),
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to redeem voucher. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRedeemingVoucher(false);
+    }
   };
 
   const handlePayment = () => {
