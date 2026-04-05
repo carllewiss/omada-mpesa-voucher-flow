@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Wifi, Clock, Shield, CreditCard, Ticket, Check } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import PaymentModal from "@/components/PaymentModal";
 import AuthorizationStatus from "@/components/AuthorizationStatus";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Package {
   id: string;
@@ -22,6 +23,13 @@ const packages: Package[] = [
   { id: "24hour", name: "24-Hour Package", duration: "24 Hours", durationHours: 24, price: 30 },
 ];
 
+interface OmadaParams {
+  clientMac?: string;
+  clientIp?: string;
+  apMac?: string;
+  ssid?: string;
+}
+
 const Index = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [voucherCode, setVoucherCode] = useState("");
@@ -29,6 +37,18 @@ const Index = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "processing" | "success" | "failed">("idle");
   const [authorizationData, setAuthorizationData] = useState<any>(null);
+  const [omadaParams, setOmadaParams] = useState<OmadaParams>({});
+
+  // Capture Omada captive portal URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setOmadaParams({
+      clientMac: params.get("clientMac") || params.get("mac") || undefined,
+      clientIp: params.get("clientIp") || params.get("ip") || undefined,
+      apMac: params.get("apMac") || undefined,
+      ssid: params.get("ssid") || undefined,
+    });
+  }, []);
 
   const handleVoucherSubmit = () => {
     if (!voucherCode.trim()) {
@@ -66,10 +86,30 @@ const Index = () => {
     setIsPaymentModalOpen(true);
   };
 
-  const handlePaymentSuccess = (data: any) => {
+  const handlePaymentSuccess = async (data: any) => {
     setPaymentStatus("success");
     setAuthorizationData(data);
     setIsPaymentModalOpen(false);
+
+    // Insert into client_authorizations with payment=paid, authorization=no
+    try {
+      await supabase.from('client_authorizations').insert({
+        mac_address: omadaParams.clientMac || null,
+        client_ip: omadaParams.clientIp || null,
+        ap_mac: omadaParams.apMac || null,
+        ssid: omadaParams.ssid || null,
+        phone_number: phoneNumber,
+        amount: selectedPackage.price,
+        package_type: selectedPackage.id,
+        duration_hours: selectedPackage.durationHours,
+        payment_status: 'paid',
+        authorization_status: 'no',
+        checkout_request_id: data.checkoutRequestId || null,
+        mpesa_receipt: data.voucherData?.code || null,
+      });
+    } catch (err) {
+      console.error('Failed to save authorization record:', err);
+    }
   };
 
   const handlePaymentFailure = () => {
