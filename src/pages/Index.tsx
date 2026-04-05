@@ -239,9 +239,13 @@ const Index = () => {
                       onClick={handleVoucherSubmit}
                       variant="outline"
                       className="px-4 border-blue-200 hover:bg-blue-50"
-                      disabled={!voucherCode.trim()}
+                      disabled={!voucherCode.trim() || isRedeemingVoucher}
                     >
-                      <Ticket className="h-4 w-4" />
+                      {isRedeemingVoucher ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Ticket className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                   <p className="text-xs text-gray-500">
