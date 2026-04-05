@@ -1,312 +1,274 @@
-# 4K SMART SOLUTIONS - Customization Guide
+# 4K SMART SOLUTIONS - Omada Billing System Documentation
 
 ## Overview
-This application is a payment portal that allows users to either pay for internet access via M-Pesa or redeem existing voucher codes for 24-hour internet access on Omada Controller software.
 
-## Application Structure
+This is a complete automated billing system for TP-Link Omada Controller hotspots. Users connect to WiFi, get redirected to a captive portal, select a package, pay via M-Pesa (Paybill **4183147**), and get automatically authorized for internet access.
 
-### Core Components
-- **Payment Flow**: M-Pesa integration for collecting payments
-- **Voucher System**: Both voucher code redemption and automatic generation
-- **User Interface**: Responsive React frontend with payment forms and voucher input
-- **Authorization**: Real-time status display for internet access
+### Architecture
 
-## Customization Options
-
-### 1. Branding Customization
-
-#### Company Name & Logo
-- **File**: `src/pages/Index.tsx` (line 50)
-- **Current**: "4K SMART SOLUTIONS"
-- **Change**: Update the header title
-```tsx
-<h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-  YOUR COMPANY NAME
-</h1>
+```
+┌──────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  Omada WiFi  │───▶│  Captive Portal  │───▶│  M-Pesa STK     │
+│  (Client)    │    │  (This App)      │    │  Push Payment   │
+└──────────────┘    └──────────────────┘    └─────────────────┘
+                            │                        │
+                            ▼                        ▼
+                    ┌──────────────────┐    ┌─────────────────┐
+                    │  client_         │◀───│  mpesa-callback  │
+                    │  authorizations  │    │  (Edge Function) │
+                    │  (Database)      │    └─────────────────┘
+                    └──────────────────┘
+                            │
+                            ▼
+                    ┌──────────────────┐    ┌─────────────────┐
+                    │  Local Node.js   │───▶│  Omada Controller│
+                    │  Polling Agent   │    │  (Authorize MAC) │
+                    └──────────────────┘    └─────────────────┘
 ```
 
-#### Page Title & Meta Data
-- **File**: `index.html` (lines 7-12)
-- **Update**: Title, description, and author meta tags
-```html
-<title>Your Company - Internet Access via M-Pesa</title>
-<meta name="author" content="Your Company Name" />
-```
+## System Components
 
-### 2. Payment Configuration
+### 1. Captive Portal (Frontend)
+- **URL**: Hosted on Lovable Cloud
+- **Purpose**: Displays package options and handles M-Pesa payment
+- **Captures**: Omada URL parameters (`clientMac`, `clientIp`, `apMac`, `ssid`)
 
-#### M-Pesa Settings
-- **File**: `src/utils/mpesaApi.ts`
-- **Configure**: 
-  - Business short code
-  - Consumer key/secret
-  - Passkey
-  - Callback URLs
+### 2. Edge Functions (Backend)
+| Function | Method | Purpose |
+|---|---|---|
+| `mpesa-stk-push` | POST | Initiates M-Pesa STK push to user's phone |
+| `mpesa-callback` | POST | Receives payment confirmation from Safaricom |
+| `mpesa-status` | GET | Frontend polls this to check payment status |
+| `pending-authorizations` | GET | Returns paid clients awaiting authorization |
+| `update-authorization` | POST | Marks a client as authorized after Omada auth |
 
-#### Package Pricing
-- **File**: `src/pages/Index.tsx` (lines 83-84)
-- **Current**: KES 30 for 24 hours
-- **Customize**: 
-```tsx
-<span className="text-2xl font-bold text-green-600">KSh YOUR_PRICE</span>
-<CardDescription className="text-gray-600">
-  Pay KSh YOUR_PRICE via M-Pesa for YOUR_DURATION unlimited internet access
-</CardDescription>
-```
+### 3. Database Tables
 
-### 3. Voucher Code System
+#### `transactions` — M-Pesa payment tracking
+| Column | Description |
+|---|---|
+| `phone_number` | M-Pesa phone number |
+| `amount` | Payment amount |
+| `package_type` | `2hour` or `24hour` |
+| `checkout_request_id` | M-Pesa checkout ID |
+| `status` | `pending`, `success`, `failed`, `cancelled` |
+| `mpesa_receipt` | M-Pesa receipt number |
 
-#### Voucher Redemption
-- **File**: `src/pages/Index.tsx` (lines 18-30)
-- **Feature**: Users can enter existing voucher codes for instant access
-- **Customize validation logic**:
+#### `client_authorizations` — Client authorization queue
+| Column | Description |
+|---|---|
+| `mac_address` | Client MAC address (from Omada URL) |
+| `client_ip` | Client IP address (from Omada URL) |
+| `ap_mac` | Access point MAC (from Omada URL) |
+| `ssid` | WiFi network name (from Omada URL) |
+| `phone_number` | M-Pesa phone number |
+| `amount` | Payment amount |
+| `package_type` | `2hour` or `24hour` |
+| `duration_hours` | `2` or `24` |
+| `payment_status` | `paid` or `unpaid` |
+| `authorization_status` | `yes` or `no` |
+
+---
+
+## Packages
+
+| Package | Duration | Price |
+|---|---|---|
+| 2-Hour | 2 hours | KSh 10 |
+| 24-Hour | 24 hours | KSh 30 |
+
+To add more packages, edit `src/pages/Index.tsx`:
 ```typescript
-const handleVoucherSubmit = () => {
-  // Add your voucher validation logic here
-  // Connect to your backend/database to verify voucher
-  if (isValidVoucher(voucherCode)) {
-    // Grant access
-  }
-};
-```
-
-#### Voucher Input UI
-- **Location**: `src/pages/Index.tsx` (lines 99-120)
-- **Customize**: Placeholder text, validation messages, button styling
-
-### 4. Omada Controller Integration
-
-#### API Configuration
-- **File**: `src/utils/omadaApi.ts`
-- **Settings**:
-  - Controller URL/IP address
-  - Authentication credentials
-  - Voucher generation parameters
-  - Duration settings (currently 24 hours)
-
-#### Voucher Generation
-```typescript
-// Modify voucher generation parameters
-const voucherConfig = {
-  duration: 24, // hours
-  bandwidth: "unlimited", // or specify limits
-  guestPolicy: "your-policy-name"
-};
-```
-
-### 5. UI/UX Customization
-
-#### Color Scheme
-- **File**: `src/index.css`
-- **Modify**: CSS custom properties for colors
-```css
-:root {
-  --primary: YOUR_PRIMARY_COLOR_HSL;
-  --secondary: YOUR_SECONDARY_COLOR_HSL;
-  --accent: YOUR_ACCENT_COLOR_HSL;
-}
-```
-
-#### Design System
-- **File**: `tailwind.config.ts`
-- **Customize**: Color tokens, animations, spacing
-
-#### Logo/Icons
-- Replace the Wifi icon with your company logo
-- **Location**: `src/pages/Index.tsx` (line 48, 72)
-```tsx
-<YourLogo className="h-8 w-8 text-blue-600" />
-```
-
-#### Voucher Code Section Styling
-- **Customize**: Input field appearance, button styling, divider text
-- **Location**: `src/pages/Index.tsx` (lines 99-127)
-```tsx
-// Customize the "Or pay with M-Pesa" divider text
-<span className="bg-white px-2 text-gray-500">YOUR_DIVIDER_TEXT</span>
-```
-
-### 6. Content Customization
-
-#### Welcome Message
-- **File**: `src/pages/Index.tsx` (lines 74-77)
-- **Customize**: Welcome text and package description
-
-#### Voucher Code Messages
-- **File**: `src/pages/Index.tsx` (lines 115-117)
-- **Customize**: Helper text and validation messages
-```tsx
-<p className="text-xs text-gray-500">
-  YOUR_CUSTOM_VOUCHER_INSTRUCTION_TEXT
-</p>
-```
-
-#### How It Works Section
-- **File**: `src/pages/Index.tsx` (lines 155-180)
-- **Modify**: Steps description to match your process (now includes voucher option)
-
-#### Success/Error Messages
-- **Locations**: Throughout payment flow components and voucher validation
-- **Customize**: User feedback messages for both payment and voucher scenarios
-
-### 7. Backend Integration (Recommended)
-
-For production deployment, integrate with Supabase for:
-
-#### Secure API Management
-- Store M-Pesa and Omada credentials securely
-- Handle payment processing server-side
-- Generate and validate vouchers through edge functions
-
-#### Database Features
-- Payment history tracking
-- User management
-- Voucher code management and validation
-- Voucher usage analytics
-- Transaction logging
-
-#### Voucher System Database Schema
-```sql
--- Example voucher table structure
-CREATE TABLE vouchers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  code VARCHAR(20) UNIQUE NOT NULL,
-  is_used BOOLEAN DEFAULT false,
-  created_at TIMESTAMP DEFAULT now(),
-  used_at TIMESTAMP,
-  expires_at TIMESTAMP NOT NULL
-);
-```
-
-#### Setup Steps
-1. Click the green Supabase button in Lovable
-2. Create edge functions for:
-   - M-Pesa payment processing
-   - Omada Controller API calls
-   - Voucher generation and validation
-   - Voucher code verification
-
-### 8. Phone Number Validation
-
-#### Customize Validation Rules
-- **File**: `src/pages/Index.tsx` (line 32)
-- **Current**: Basic length validation (minimum 10 characters)
-- **Modify**: For your country/format
-```typescript
-const phoneRegex = /^YOUR_PHONE_PATTERN$/;
-if (!phoneRegex.test(phoneNumber)) {
-  // Your validation message
-}
-```
-
-### 9. Deployment Configuration
-
-#### Environment Variables (via Supabase)
-```
-MPESA_CONSUMER_KEY=your_key
-MPESA_CONSUMER_SECRET=your_secret
-OMADA_CONTROLLER_URL=your_controller_ip
-OMADA_USERNAME=your_username
-OMADA_PASSWORD=your_password
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_key
-```
-
-#### Custom Domain
-- Configure in Lovable Project Settings
-- Update CORS settings for your domain
-
-### 10. Advanced Customizations
-
-#### Dual Access Methods
-The application now supports both payment and voucher code access:
-```tsx
-// Customize the access options layout
-const AccessOptions = () => (
-  <div>
-    <VoucherCodeInput />
-    <PaymentDivider />
-    <PaymentForm />
-  </div>
-);
-```
-
-#### Multiple Package Options
-Add different duration/price packages:
-```tsx
-const packages = [
-  { name: "1 Hour", price: 10, duration: 1 },
-  { name: "24 Hours", price: 30, duration: 24 },
-  { name: "7 Days", price: 200, duration: 168 }
+const packages: Package[] = [
+  { id: "2hour", name: "2-Hour Package", duration: "2 Hours", durationHours: 2, price: 10 },
+  { id: "24hour", name: "24-Hour Package", duration: "24 Hours", durationHours: 24, price: 30 },
+  // Add more here:
+  { id: "7day", name: "7-Day Package", duration: "7 Days", durationHours: 168, price: 200 },
 ];
 ```
 
-#### Voucher Code Generation Patterns
-```typescript
-// Customize voucher code format
-const generateVoucherCode = () => {
-  const prefix = "4KSS"; // Your prefix
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 6);
-  return `${prefix}-${timestamp}-${random}`.toUpperCase();
-};
+---
+
+## M-Pesa Configuration
+
+Production credentials are stored as secrets in Lovable Cloud (never in code):
+
+| Secret | Description |
+|---|---|
+| `MPESA_CONSUMER_KEY` | Safaricom API consumer key |
+| `MPESA_CONSUMER_SECRET` | Safaricom API consumer secret |
+| `MPESA_PASSKEY` | STK push passkey |
+| `MPESA_SHORTCODE` | Paybill number (4183147) |
+
+The STK push uses the **production** Safaricom API: `https://api.safaricom.co.ke`
+
+---
+
+## Omada Controller Setup
+
+### Captive Portal URL Configuration
+
+In your Omada Controller, set the **External Portal URL** to your published app URL with Omada parameters:
+
+```
+https://omada-mpesa-voucher-flow.lovable.app/?clientMac=<clientMac>&clientIp=<clientIp>&apMac=<apMac>&ssid=<ssid>
 ```
 
-#### Multi-language Support
-- Add language toggle
-- Create translation files
-- Update all text content including voucher-related text
+The frontend automatically captures these URL parameters and stores them in the `client_authorizations` table.
 
-#### Analytics Integration
-- Add Google Analytics
-- Track payment conversions
-- Monitor voucher usage and redemption rates
-- Track conversion between voucher and payment methods
+---
 
-## Security Considerations
+## Local Node.js Polling Agent
 
-1. **Never expose API keys** in frontend code
-2. **Use Supabase edge functions** for sensitive operations
-3. **Implement rate limiting** for payment attempts
-4. **Validate all inputs** server-side
-5. **Use HTTPS** for all API communications
+Since your server is behind NAT without a public IP, a local Node.js script polls the cloud system for paid clients and authorizes them on the Omada Controller.
 
-## Testing
+### How It Works
 
-### Local Development
+1. Every 5 seconds, the script calls `GET /functions/v1/pending-authorizations`
+2. It receives a list of clients with `payment_status=paid` and `authorization_status=no`
+3. For each client, it authorizes the MAC address on the Omada Controller via its API
+4. After successful authorization, it calls `POST /functions/v1/update-authorization` with `{ "id": "<record_id>" }` to mark the client as authorized
+
+### API Endpoints for the Polling Agent
+
+#### Fetch pending clients
+```
+GET https://tyqcalkdvsmeczbbqfns.supabase.co/functions/v1/pending-authorizations
+
+Response:
+{
+  "clients": [
+    {
+      "id": "uuid",
+      "mac_address": "AA:BB:CC:DD:EE:FF",
+      "client_ip": "192.168.1.100",
+      "ap_mac": "11:22:33:44:55:66",
+      "ssid": "4KSMART",
+      "phone_number": "254700000000",
+      "amount": 10,
+      "package_type": "2hour",
+      "duration_hours": 2,
+      "payment_status": "paid",
+      "authorization_status": "no"
+    }
+  ]
+}
+```
+
+#### Mark client as authorized
+```
+POST https://tyqcalkdvsmeczbbqfns.supabase.co/functions/v1/update-authorization
+Content-Type: application/json
+
+Body: { "id": "uuid-of-the-record" }
+
+Response: { "success": true, "client": { ... } }
+```
+
+### Sample Node.js Script Structure
+
+```javascript
+const SUPABASE_URL = 'https://tyqcalkdvsmeczbbqfns.supabase.co';
+const SUPABASE_ANON_KEY = 'your-anon-key';
+const OMADA_URL = 'https://your-omada-controller:8043';
+const OMADA_SITE = 'Default';
+
+async function pollPendingClients() {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/pending-authorizations`, {
+    headers: { 'apikey': SUPABASE_ANON_KEY }
+  });
+  const { clients } = await res.json();
+
+  for (const client of clients) {
+    console.log(`Authorizing MAC: ${client.mac_address} for ${client.duration_hours}hrs`);
+
+    // 1. Authorize on Omada Controller (use Omada API)
+    const authorized = await authorizeOnOmada(client.mac_address, client.duration_hours);
+
+    if (authorized) {
+      // 2. Update authorization status
+      await fetch(`${SUPABASE_URL}/functions/v1/update-authorization`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ id: client.id })
+      });
+      console.log(`✅ Client ${client.mac_address} authorized`);
+    }
+  }
+}
+
+// Poll every 5 seconds
+setInterval(pollPendingClients, 5000);
+```
+
+---
+
+## Branding Customization
+
+### Company Name
+- **File**: `src/pages/Index.tsx`
+- Change `4K SMART SOLUTIONS` in the header
+
+### Colors
+- **File**: `src/index.css` — CSS custom properties
+- **File**: `tailwind.config.ts` — Tailwind tokens
+
+### Page Title
+- **File**: `index.html` — Update `<title>` and meta tags
+
+---
+
+## Payment Flow (Step by Step)
+
+1. Client connects to Omada WiFi → redirected to captive portal with MAC/IP params
+2. Client selects package (2hr / 24hr) and enters M-Pesa number
+3. Frontend calls `mpesa-stk-push` → Safaricom sends STK push to phone
+4. Client enters PIN → Safaricom calls `mpesa-callback` with result
+5. Callback updates `transactions` table to `status=success`
+6. Frontend polls `mpesa-status` and detects success
+7. Frontend inserts record into `client_authorizations` with `payment_status=paid`, `authorization_status=no`
+8. Local Node.js agent picks up the record via `pending-authorizations`
+9. Agent authorizes MAC on Omada Controller
+10. Agent calls `update-authorization` to set `authorization_status=yes`
+
+---
+
+## Security Notes
+
+- M-Pesa credentials are stored as encrypted secrets (never in code)
+- The `mpesa-callback` endpoint is public (required by Safaricom)
+- All other endpoints use CORS headers for web access
+- Database has RLS enabled (public access for this captive portal use case)
+- No user authentication required (captive portal is pre-auth by design)
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|---|---|
+| STK push not received | Check phone number format (must be 254...) |
+| Payment stuck on "waiting" | Check `mpesa-callback` edge function logs |
+| Client not authorized | Check `pending-authorizations` returns the client; check Node.js agent logs |
+| MAC address missing | Verify Omada portal URL includes `clientMac` parameter |
+| Edge function errors | Check logs in Lovable Cloud backend panel |
+
+---
+
+## Development
+
 ```bash
 npm install
 npm run dev
 ```
 
-### Payment & Voucher Testing
-- Use M-Pesa sandbox credentials for payment testing
-- Test voucher generation with Omada test environment
-- Test voucher code validation and redemption flow
-- Verify all error handling scenarios for both payment and voucher paths
-- Test the UI flow between voucher entry and payment options
+## Deployment
 
-## Support & Maintenance
-
-### Regular Updates
-- Monitor M-Pesa API changes
-- Update Omada Controller compatibility
-- Security patches and dependency updates
-
-### Monitoring
-- Set up payment failure alerts
-- Monitor voucher generation and validation success rates
-- Track voucher code redemption patterns
-- Monitor user preference between payment vs voucher access
-- Track user experience metrics for both access methods
-
-## Getting Help
-
-1. **Supabase Integration**: [Supabase Docs](https://docs.lovable.dev/integrations/supabase/)
-2. **M-Pesa API**: Official Safaricom documentation
-3. **Omada Controller**: TP-Link Omada API documentation
-4. **Lovable Support**: Contact through your Lovable dashboard
+Click **Share → Publish** in Lovable to deploy. Edge functions deploy automatically.
 
 ---
 
-*This guide covers the main customization options. For specific technical questions or advanced modifications, consult the relevant API documentation or contact your development team.*
+*For support, contact your development team or consult Safaricom M-Pesa API docs and TP-Link Omada Controller API docs.*
