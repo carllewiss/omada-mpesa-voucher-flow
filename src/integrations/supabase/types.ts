@@ -110,6 +110,39 @@ export type Database = {
         }
         Relationships: []
       }
+      vouchers: {
+        Row: {
+          code: string
+          created_at: string
+          duration_hours: number
+          id: string
+          package_type: string
+          status: string
+          used_at: string | null
+          used_by_mac: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          duration_hours?: number
+          id?: string
+          package_type?: string
+          status?: string
+          used_at?: string | null
+          used_by_mac?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          duration_hours?: number
+          id?: string
+          package_type?: string
+          status?: string
+          used_at?: string | null
+          used_by_mac?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
