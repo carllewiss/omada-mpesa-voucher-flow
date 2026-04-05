@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_authorizations: {
+        Row: {
+          amount: number
+          ap_mac: string | null
+          authorization_status: string
+          checkout_request_id: string | null
+          client_ip: string | null
+          created_at: string
+          duration_hours: number
+          id: string
+          mac_address: string | null
+          mpesa_receipt: string | null
+          package_type: string
+          payment_status: string
+          phone_number: string
+          ssid: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          ap_mac?: string | null
+          authorization_status?: string
+          checkout_request_id?: string | null
+          client_ip?: string | null
+          created_at?: string
+          duration_hours?: number
+          id?: string
+          mac_address?: string | null
+          mpesa_receipt?: string | null
+          package_type?: string
+          payment_status?: string
+          phone_number: string
+          ssid?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          ap_mac?: string | null
+          authorization_status?: string
+          checkout_request_id?: string | null
+          client_ip?: string | null
+          created_at?: string
+          duration_hours?: number
+          id?: string
+          mac_address?: string | null
+          mpesa_receipt?: string | null
+          package_type?: string
+          payment_status?: string
+          phone_number?: string
+          ssid?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
