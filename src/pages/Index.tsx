@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wifi, Clock, Shield, CreditCard, Ticket, Check, RefreshCw } from "lucide-react";
+import { Wifi, Clock, Shield, CreditCard, Ticket, Check, RefreshCw, Phone, MessageCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import PaymentModal from "@/components/PaymentModal";
 import AuthorizationStatus from "@/components/AuthorizationStatus";
