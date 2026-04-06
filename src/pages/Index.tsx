@@ -38,16 +38,68 @@ const Index = () => {
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "processing" | "success" | "failed">("idle");
   const [authorizationData, setAuthorizationData] = useState<any>(null);
   const [omadaParams, setOmadaParams] = useState<OmadaParams>({});
+  const [checkingExisting, setCheckingExisting] = useState(true);
 
-  // Capture Omada captive portal URL parameters
+  // Capture Omada captive portal URL parameters and check for existing active session
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setOmadaParams({
-      clientMac: params.get("clientMac") || params.get("mac") || undefined,
-      clientIp: params.get("clientIp") || params.get("ip") || undefined,
-      apMac: params.get("apMac") || undefined,
-      ssid: params.get("ssid") || undefined,
-    });
+    const mac = params.get("clientMac") || params.get("mac") || undefined;
+    const ip = params.get("clientIp") || params.get("ip") || undefined;
+    const ap = params.get("apMac") || undefined;
+    const ssidParam = params.get("ssid") || undefined;
+    setOmadaParams({ clientMac: mac, clientIp: ip, apMac: ap, ssid: ssidParam });
+
+    // Check if this MAC already has an active paid session (re-authentication)
+    const checkExistingAuth = async () => {
+      if (!mac) {
+        setCheckingExisting(false);
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from('client_authorizations')
+          .select('*')
+          .eq('mac_address', mac)
+          .eq('payment_status', 'paid')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0) {
+          const record = data[0];
+          const createdAt = new Date(record.created_at).getTime();
+          const expiresAt = createdAt + record.duration_hours * 60 * 60 * 1000;
+          if (Date.now() < expiresAt) {
+            // Still within paid duration — re-authorize automatically
+            if (record.authorization_status === 'yes') {
+              // Already authorized, just re-insert a new auth record for the agent
+              await supabase.from('client_authorizations').insert({
+                mac_address: mac,
+                client_ip: ip || null,
+                ap_mac: ap || null,
+                ssid: ssidParam || null,
+                phone_number: record.phone_number,
+                amount: 0,
+                package_type: record.package_type,
+                duration_hours: Math.ceil((expiresAt - Date.now()) / (60 * 60 * 1000)),
+                payment_status: 'paid',
+                authorization_status: 'no',
+                mpesa_receipt: record.mpesa_receipt ? `RE-${record.mpesa_receipt}` : null,
+              });
+            }
+            setPaymentStatus("success");
+            setAuthorizationData({
+              transactionId: record.mpesa_receipt || record.id,
+              expiryTime: new Date(expiresAt),
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Re-auth check failed:', err);
+      } finally {
+        setCheckingExisting(false);
+      }
+    };
+    checkExistingAuth();
   }, []);
 
   const [isRedeemingVoucher, setIsRedeemingVoucher] = useState(false);
