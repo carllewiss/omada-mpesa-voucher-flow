@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wifi, Clock, Shield, CreditCard, Ticket, Check, RefreshCw } from "lucide-react";
+import { Wifi, Clock, Shield, CreditCard, Ticket, Check, RefreshCw, Phone, MessageCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import PaymentModal from "@/components/PaymentModal";
 import AuthorizationStatus from "@/components/AuthorizationStatus";
@@ -38,16 +38,68 @@ const Index = () => {
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "processing" | "success" | "failed">("idle");
   const [authorizationData, setAuthorizationData] = useState<any>(null);
   const [omadaParams, setOmadaParams] = useState<OmadaParams>({});
+  const [checkingExisting, setCheckingExisting] = useState(true);
 
-  // Capture Omada captive portal URL parameters
+  // Capture Omada captive portal URL parameters and check for existing active session
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setOmadaParams({
-      clientMac: params.get("clientMac") || params.get("mac") || undefined,
-      clientIp: params.get("clientIp") || params.get("ip") || undefined,
-      apMac: params.get("apMac") || undefined,
-      ssid: params.get("ssid") || undefined,
-    });
+    const mac = params.get("clientMac") || params.get("mac") || undefined;
+    const ip = params.get("clientIp") || params.get("ip") || undefined;
+    const ap = params.get("apMac") || undefined;
+    const ssidParam = params.get("ssid") || undefined;
+    setOmadaParams({ clientMac: mac, clientIp: ip, apMac: ap, ssid: ssidParam });
+
+    // Check if this MAC already has an active paid session (re-authentication)
+    const checkExistingAuth = async () => {
+      if (!mac) {
+        setCheckingExisting(false);
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from('client_authorizations')
+          .select('*')
+          .eq('mac_address', mac)
+          .eq('payment_status', 'paid')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0) {
+          const record = data[0];
+          const createdAt = new Date(record.created_at).getTime();
+          const expiresAt = createdAt + record.duration_hours * 60 * 60 * 1000;
+          if (Date.now() < expiresAt) {
+            // Still within paid duration — re-authorize automatically
+            if (record.authorization_status === 'yes') {
+              // Already authorized, just re-insert a new auth record for the agent
+              await supabase.from('client_authorizations').insert({
+                mac_address: mac,
+                client_ip: ip || null,
+                ap_mac: ap || null,
+                ssid: ssidParam || null,
+                phone_number: record.phone_number,
+                amount: 0,
+                package_type: record.package_type,
+                duration_hours: Math.ceil((expiresAt - Date.now()) / (60 * 60 * 1000)),
+                payment_status: 'paid',
+                authorization_status: 'no',
+                mpesa_receipt: record.mpesa_receipt ? `RE-${record.mpesa_receipt}` : null,
+              });
+            }
+            setPaymentStatus("success");
+            setAuthorizationData({
+              transactionId: record.mpesa_receipt || record.id,
+              expiryTime: new Date(expiresAt),
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Re-auth check failed:', err);
+      } finally {
+        setCheckingExisting(false);
+      }
+    };
+    checkExistingAuth();
   }, []);
 
   const [isRedeemingVoucher, setIsRedeemingVoucher] = useState(false);
@@ -221,36 +273,39 @@ const Index = () => {
                   </div>
                 </div>
 
-                {/* Voucher Code Input */}
-                <div className="space-y-2">
-                  <Label htmlFor="voucher" className="text-gray-700">
-                    Voucher Code (Optional)
-                  </Label>
+                {/* Voucher Code Section - Prominent */}
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                      <Ticket className="h-4 w-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-800 text-sm">Have a Voucher Code?</h3>
+                      <p className="text-xs text-gray-500">Enter your code for instant WiFi access</p>
+                    </div>
+                  </div>
                   <div className="flex space-x-2">
                     <Input
                       id="voucher"
                       type="text"
-                      placeholder="Enter voucher code"
+                      placeholder="e.g. WIFI-1234"
                       value={voucherCode}
-                      onChange={(e) => setVoucherCode(e.target.value)}
-                      className="border-blue-200 focus:border-blue-400"
+                      onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                      className="border-purple-200 focus:border-purple-400 bg-white font-mono text-base tracking-wider uppercase"
                     />
                     <Button
                       onClick={handleVoucherSubmit}
-                      variant="outline"
-                      className="px-4 border-blue-200 hover:bg-blue-50"
+                      className="px-6 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
                       disabled={!voucherCode.trim() || isRedeemingVoucher}
                     >
                       {isRedeemingVoucher ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <RefreshCw className="h-4 w-4 animate-spin mr-1" />
                       ) : (
-                        <Ticket className="h-4 w-4" />
+                        <Ticket className="h-4 w-4 mr-1" />
                       )}
+                      Redeem
                     </Button>
                   </div>
-                  <p className="text-xs text-gray-500">
-                    Have a voucher code? Enter it above to get instant access
-                  </p>
                 </div>
 
                 <div className="relative">
@@ -317,17 +372,41 @@ const Index = () => {
                     <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-semibold text-blue-600">2</span>
                     </div>
-                    <p>Enter your M-Pesa number and complete payment</p>
+                    <p>Enter your M-Pesa number or use a voucher code</p>
                   </div>
                   <div className="flex items-start space-x-3">
                     <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-semibold text-blue-600">3</span>
                     </div>
-                    <p>Get instant internet access with your voucher</p>
+                    <p>Get instant internet access automatically</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Contact / Support */}
+            <div className="text-center space-y-2 mt-4">
+              <p className="text-sm text-gray-500">Need help? Contact us</p>
+              <div className="flex items-center justify-center space-x-3">
+                <a
+                  href="tel:0736217411"
+                  className="inline-flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  <Phone className="h-4 w-4" />
+                  <span>0736 217 411</span>
+                </a>
+                <span className="text-gray-300">|</span>
+                <a
+                  href="https://wa.me/254736217411?text=Hi%2C%20I%20need%20help%20with%20WiFi%20access"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center space-x-1 text-sm text-green-600 hover:text-green-800 font-medium"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>WhatsApp</span>
+                </a>
+              </div>
+            </div>
           </div>
         )}
       </main>

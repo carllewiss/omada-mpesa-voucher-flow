@@ -221,6 +221,22 @@ Production credentials stored as secrets (Paybill **4183147**):
 | Company name | `src/pages/Index.tsx` — change `4K SMART SOLUTIONS` |
 | Colors | `src/index.css` and `tailwind.config.ts` |
 | Page title | `index.html` — `<title>` tag |
+| Support phone | `src/pages/Index.tsx` — search for `0736217411` and update |
+| WhatsApp link | `src/pages/Index.tsx` — search for `254736217411` and update |
+
+---
+
+## Re-Authentication (Disconnected Clients)
+
+If a client gets disconnected before their paid time expires, the system **automatically re-authorizes** them:
+
+1. Client reconnects to WiFi → redirected to captive portal with MAC params
+2. Portal checks `client_authorizations` for an active session matching the MAC
+3. If a valid (unexpired) session exists, a new authorization record is inserted
+4. The Node.js agent picks it up and re-authorizes the MAC on Omada
+5. Client skips the payment screen entirely
+
+**No action needed** — this is fully automatic. The client sees the "Connected" screen instead of the payment form.
 
 ---
 
@@ -245,3 +261,4 @@ Production credentials stored as secrets (Paybill **4183147**):
 | MAC missing | Verify Omada portal URL has `clientMac` param |
 | Voucher invalid | Check voucher exists in DB with status `unused` |
 | Agent can't reach Omada | Verify IP/port and credentials in CONFIG |
+| Client asked to pay again | Check re-auth: MAC must match and time not expired |
