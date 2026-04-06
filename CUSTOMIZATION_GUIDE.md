@@ -1,248 +1,237 @@
-# 4K SMART SOLUTIONS - Omada Billing System Documentation
+# 4K SMART SOLUTIONS - Omada Billing System
 
-## Overview
+## Quick Start
 
-This is a complete automated billing system for TP-Link Omada Controller hotspots. Users connect to WiFi, get redirected to a captive portal, select a package, pay via M-Pesa (Paybill **4183147**), and get automatically authorized for internet access.
+1. **Publish** the captive portal app from Lovable
+2. **Configure** Omada Controller External Portal URL
+3. **Run** the Node.js polling agent on your local PC
+4. Clients connect → pay → get authorized automatically
 
-### Architecture
+---
+
+## Architecture
 
 ```
-┌──────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│  Omada WiFi  │───▶│  Captive Portal  │───▶│  M-Pesa STK     │
-│  (Client)    │    │  (This App)      │    │  Push Payment   │
-└──────────────┘    └──────────────────┘    └─────────────────┘
-                            │                        │
-                            ▼                        ▼
-                    ┌──────────────────┐    ┌─────────────────┐
-                    │  client_         │◀───│  mpesa-callback  │
-                    │  authorizations  │    │  (Edge Function) │
-                    │  (Database)      │    └─────────────────┘
-                    └──────────────────┘
-                            │
-                            ▼
-                    ┌──────────────────┐    ┌─────────────────┐
-                    │  Local Node.js   │───▶│  Omada Controller│
-                    │  Polling Agent   │    │  (Authorize MAC) │
-                    └──────────────────┘    └─────────────────┘
+Client WiFi → Captive Portal → M-Pesa/Voucher Payment
+                                       ↓
+                              Cloud Database (paid, auth=no)
+                                       ↓
+                            Local Node.js Agent (polls every 5s)
+                                       ↓
+                              Omada Controller (authorize MAC)
+                                       ↓
+                              Cloud Database (paid, auth=yes)
 ```
 
-## System Components
+---
 
-### 1. Captive Portal (Frontend)
-- **URL**: Hosted on Lovable Cloud
-- **Purpose**: Displays package options and handles M-Pesa payment
-- **Captures**: Omada URL parameters (`clientMac`, `clientIp`, `apMac`, `ssid`)
+## Database Connection Details
 
-### 2. Edge Functions (Backend)
-| Function | Method | Purpose |
-|---|---|---|
-| `mpesa-stk-push` | POST | Initiates M-Pesa STK push to user's phone |
-| `mpesa-callback` | POST | Receives payment confirmation from Safaricom |
-| `mpesa-status` | GET | Frontend polls this to check payment status |
-| `pending-authorizations` | GET | Returns paid clients awaiting authorization |
-| `update-authorization` | POST | Marks a client as authorized after Omada auth |
+Use these to connect from your local Node.js agent or any external tool:
 
-### 3. Database Tables
-
-#### `transactions` — M-Pesa payment tracking
-| Column | Description |
+| Key | Value |
 |---|---|
-| `phone_number` | M-Pesa phone number |
-| `amount` | Payment amount |
-| `package_type` | `2hour` or `24hour` |
-| `checkout_request_id` | M-Pesa checkout ID |
-| `status` | `pending`, `success`, `failed`, `cancelled` |
-| `mpesa_receipt` | M-Pesa receipt number |
-
-#### `client_authorizations` — Client authorization queue
-| Column | Description |
-|---|---|
-| `mac_address` | Client MAC address (from Omada URL) |
-| `client_ip` | Client IP address (from Omada URL) |
-| `ap_mac` | Access point MAC (from Omada URL) |
-| `ssid` | WiFi network name (from Omada URL) |
-| `phone_number` | M-Pesa phone number |
-| `amount` | Payment amount |
-| `package_type` | `2hour` or `24hour` |
-| `duration_hours` | `2` or `24` |
-| `payment_status` | `paid` or `unpaid` |
-| `authorization_status` | `yes` or `no` |
+| **Supabase URL** | `https://tyqcalkdvsmeczbbqfns.supabase.co` |
+| **Anon Key** | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5cWNhbGtkdnNtZWN6YmJxZm5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3NDUxNTYsImV4cCI6MjA4NjMyMTE1Nn0.VTgZPClT7Te2R-9Y6zvtVyDj6pVWRvX7svvvLSx3fcw` |
+| **REST API** | `https://tyqcalkdvsmeczbbqfns.supabase.co/rest/v1/` |
+| **Edge Functions** | `https://tyqcalkdvsmeczbbqfns.supabase.co/functions/v1/` |
 
 ---
 
 ## Packages
 
-| Package | Duration | Price |
+| Package | Duration | Price (KSh) |
 |---|---|---|
-| 2-Hour | 2 hours | KSh 10 |
-| 24-Hour | 24 hours | KSh 30 |
+| 2-Hour | 2 hours | 10 |
+| 24-Hour | 24 hours | 30 |
 
-To add more packages, edit `src/pages/Index.tsx`:
+### Adding More Packages
+
+Edit `src/pages/Index.tsx`:
 ```typescript
 const packages: Package[] = [
   { id: "2hour", name: "2-Hour Package", duration: "2 Hours", durationHours: 2, price: 10 },
   { id: "24hour", name: "24-Hour Package", duration: "24 Hours", durationHours: 24, price: 30 },
-  // Add more here:
+  // Add more:
   { id: "7day", name: "7-Day Package", duration: "7 Days", durationHours: 168, price: 200 },
 ];
 ```
 
 ---
 
-## M-Pesa Configuration
-
-Production credentials are stored as secrets in Lovable Cloud (never in code):
-
-| Secret | Description |
-|---|---|
-| `MPESA_CONSUMER_KEY` | Safaricom API consumer key |
-| `MPESA_CONSUMER_SECRET` | Safaricom API consumer secret |
-| `MPESA_PASSKEY` | STK push passkey |
-| `MPESA_SHORTCODE` | Paybill number (4183147) |
-
-The STK push uses the **production** Safaricom API: `https://api.safaricom.co.ke`
-
----
-
 ## Omada Controller Setup
 
-### Captive Portal URL Configuration
+### External Portal URL
 
-In your Omada Controller, set the **External Portal URL** to your published app URL with Omada parameters:
+Set this in your Omada Controller → Captive Portal → External Portal:
 
 ```
 https://omada-mpesa-voucher-flow.lovable.app/?clientMac=<clientMac>&clientIp=<clientIp>&apMac=<apMac>&ssid=<ssid>
 ```
 
-The frontend automatically captures these URL parameters and stores them in the `client_authorizations` table.
-
 ---
 
 ## Local Node.js Polling Agent
 
-Since your server is behind NAT without a public IP, a local Node.js script polls the cloud system for paid clients and authorizes them on the Omada Controller.
+### Prerequisites
+- Node.js 18+ installed
+- Access to your Omada Controller (same network)
 
-### How It Works
+### Setup
 
-1. Every 5 seconds, the script calls `GET /functions/v1/pending-authorizations`
-2. It receives a list of clients with `payment_status=paid` and `authorization_status=no`
-3. For each client, it authorizes the MAC address on the Omada Controller via its API
-4. After successful authorization, it calls `POST /functions/v1/update-authorization` with `{ "id": "<record_id>" }` to mark the client as authorized
+1. Download `omada-polling-agent.js` from the documents
+2. Install dependencies:
+   ```bash
+   npm install express node-fetch@2
+   ```
+3. Edit the **CONFIG** section in the script:
+   ```javascript
+   const CONFIG = {
+     // These are pre-filled — no changes needed:
+     SUPABASE_URL: 'https://tyqcalkdvsmeczbbqfns.supabase.co',
+     SUPABASE_ANON_KEY: '...already filled...',
 
-### API Endpoints for the Polling Agent
+     // CHANGE THESE to match your Omada Controller:
+     OMADA_URL: 'https://192.168.0.1:8043',  // Your controller IP
+     OMADA_SITE: 'Default',                    // Your site name
+     OMADA_USERNAME: 'admin',                  // Your login
+     OMADA_PASSWORD: 'admin',                  // Your password
+   };
+   ```
+4. Run:
+   ```bash
+   node omada-polling-agent.js
+   ```
+5. Open **http://localhost:3000** for the dashboard
 
-#### Fetch pending clients
+### Dashboard Features
+- **Daily Report**: Today's payments, revenue, receipts
+- **Weekly Report**: Week summary with daily breakdown and top payers
+- **Agent Stats**: Live polling status and authorization counts
+
+### What the Agent Does
+1. Every 5 seconds, calls `GET /functions/v1/pending-authorizations`
+2. Gets clients where `payment_status=paid` and `authorization_status=no`
+3. Authorizes each MAC address on Omada Controller
+4. Calls `POST /functions/v1/update-authorization` to mark `authorization_status=yes`
+
+---
+
+## Database Tables
+
+### `transactions` — M-Pesa payments
+| Column | Description |
+|---|---|
+| `phone_number` | M-Pesa phone (254...) |
+| `amount` | Payment amount |
+| `package_type` | `2hour` or `24hour` |
+| `status` | `pending`, `success`, `failed`, `cancelled` |
+| `mpesa_receipt` | Receipt number |
+| `checkout_request_id` | M-Pesa checkout ID |
+
+### `client_authorizations` — Authorization queue
+| Column | Description |
+|---|---|
+| `mac_address` | Client MAC (from Omada URL) |
+| `client_ip` | Client IP |
+| `ap_mac` | Access point MAC |
+| `ssid` | WiFi network name |
+| `phone_number` | Phone or `voucher-user` |
+| `amount` | Payment amount (0 for vouchers) |
+| `package_type` | `2hour` or `24hour` |
+| `duration_hours` | 2 or 24 |
+| `payment_status` | `paid` or `unpaid` |
+| `authorization_status` | `yes` or `no` |
+
+### `vouchers` — Voucher codes
+| Column | Description |
+|---|---|
+| `code` | Unique voucher code |
+| `package_type` | `2hour` or `24hour` |
+| `duration_hours` | 2 or 24 |
+| `status` | `unused` or `used` |
+| `used_by_mac` | MAC of client who used it |
+
+### Inserting Vouchers Manually
+
+Use the REST API to insert vouchers:
+```bash
+curl -X POST "https://tyqcalkdvsmeczbbqfns.supabase.co/rest/v1/vouchers" \
+  -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5cWNhbGtkdnNtZWN6YmJxZm5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3NDUxNTYsImV4cCI6MjA4NjMyMTE1Nn0.VTgZPClT7Te2R-9Y6zvtVyDj6pVWRvX7svvvLSx3fcw" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "WIFI-1234", "package_type": "2hour", "duration_hours": 2}'
+```
+
+---
+
+## Edge Functions
+
+| Function | Method | Purpose |
+|---|---|---|
+| `mpesa-stk-push` | POST | Sends STK push to phone |
+| `mpesa-callback` | POST | Receives Safaricom payment result |
+| `mpesa-status` | GET | Frontend polls payment status |
+| `pending-authorizations` | GET | Returns paid, unauthorized clients |
+| `update-authorization` | POST | Marks client as authorized |
+| `redeem-voucher` | POST | Validates and redeems voucher code |
+
+---
+
+## API Endpoints for External Use
+
+### Fetch pending clients
 ```
 GET https://tyqcalkdvsmeczbbqfns.supabase.co/functions/v1/pending-authorizations
+Headers: apikey: <anon-key>
 
-Response:
-{
-  "clients": [
-    {
-      "id": "uuid",
-      "mac_address": "AA:BB:CC:DD:EE:FF",
-      "client_ip": "192.168.1.100",
-      "ap_mac": "11:22:33:44:55:66",
-      "ssid": "4KSMART",
-      "phone_number": "254700000000",
-      "amount": 10,
-      "package_type": "2hour",
-      "duration_hours": 2,
-      "payment_status": "paid",
-      "authorization_status": "no"
-    }
-  ]
-}
+Response: { "clients": [{ "id", "mac_address", "duration_hours", ... }] }
 ```
 
-#### Mark client as authorized
+### Mark client authorized
 ```
 POST https://tyqcalkdvsmeczbbqfns.supabase.co/functions/v1/update-authorization
-Content-Type: application/json
+Headers: apikey: <anon-key>, Content-Type: application/json
+Body: { "id": "uuid-of-record" }
 
-Body: { "id": "uuid-of-the-record" }
-
-Response: { "success": true, "client": { ... } }
+Response: { "success": true }
 ```
 
-### Sample Node.js Script Structure
-
-```javascript
-const SUPABASE_URL = 'https://tyqcalkdvsmeczbbqfns.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key';
-const OMADA_URL = 'https://your-omada-controller:8043';
-const OMADA_SITE = 'Default';
-
-async function pollPendingClients() {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/pending-authorizations`, {
-    headers: { 'apikey': SUPABASE_ANON_KEY }
-  });
-  const { clients } = await res.json();
-
-  for (const client of clients) {
-    console.log(`Authorizing MAC: ${client.mac_address} for ${client.duration_hours}hrs`);
-
-    // 1. Authorize on Omada Controller (use Omada API)
-    const authorized = await authorizeOnOmada(client.mac_address, client.duration_hours);
-
-    if (authorized) {
-      // 2. Update authorization status
-      await fetch(`${SUPABASE_URL}/functions/v1/update-authorization`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({ id: client.id })
-      });
-      console.log(`✅ Client ${client.mac_address} authorized`);
-    }
-  }
-}
-
-// Poll every 5 seconds
-setInterval(pollPendingClients, 5000);
+### Query transactions (REST API)
 ```
+GET https://tyqcalkdvsmeczbbqfns.supabase.co/rest/v1/transactions?status=eq.success&order=created_at.desc
+Headers: apikey: <anon-key>
+```
+
+---
+
+## M-Pesa Configuration
+
+Production credentials stored as secrets (Paybill **4183147**):
+- `MPESA_CONSUMER_KEY`
+- `MPESA_CONSUMER_SECRET`
+- `MPESA_PASSKEY`
+- `MPESA_SHORTCODE`
 
 ---
 
 ## Branding Customization
 
-### Company Name
-- **File**: `src/pages/Index.tsx`
-- Change `4K SMART SOLUTIONS` in the header
-
-### Colors
-- **File**: `src/index.css` — CSS custom properties
-- **File**: `tailwind.config.ts` — Tailwind tokens
-
-### Page Title
-- **File**: `index.html` — Update `<title>` and meta tags
+| What | Where |
+|---|---|
+| Company name | `src/pages/Index.tsx` — change `4K SMART SOLUTIONS` |
+| Colors | `src/index.css` and `tailwind.config.ts` |
+| Page title | `index.html` — `<title>` tag |
 
 ---
 
-## Payment Flow (Step by Step)
+## Payment Flow
 
-1. Client connects to Omada WiFi → redirected to captive portal with MAC/IP params
-2. Client selects package (2hr / 24hr) and enters M-Pesa number
-3. Frontend calls `mpesa-stk-push` → Safaricom sends STK push to phone
-4. Client enters PIN → Safaricom calls `mpesa-callback` with result
-5. Callback updates `transactions` table to `status=success`
-6. Frontend polls `mpesa-status` and detects success
-7. Frontend inserts record into `client_authorizations` with `payment_status=paid`, `authorization_status=no`
-8. Local Node.js agent picks up the record via `pending-authorizations`
-9. Agent authorizes MAC on Omada Controller
-10. Agent calls `update-authorization` to set `authorization_status=yes`
-
----
-
-## Security Notes
-
-- M-Pesa credentials are stored as encrypted secrets (never in code)
-- The `mpesa-callback` endpoint is public (required by Safaricom)
-- All other endpoints use CORS headers for web access
-- Database has RLS enabled (public access for this captive portal use case)
-- No user authentication required (captive portal is pre-auth by design)
+1. Client connects to WiFi → redirected to captive portal with MAC/IP params
+2. Client selects package + enters M-Pesa number (or voucher code)
+3. M-Pesa: STK push → payment → callback → record saved
+4. Voucher: code validated → marked used → record saved
+5. Both paths insert into `client_authorizations` with `paid` + `auth=no`
+6. Local Node.js agent picks up record → authorizes on Omada → updates to `auth=yes`
 
 ---
 
@@ -250,25 +239,9 @@ setInterval(pollPendingClients, 5000);
 
 | Issue | Solution |
 |---|---|
-| STK push not received | Check phone number format (must be 254...) |
-| Payment stuck on "waiting" | Check `mpesa-callback` edge function logs |
-| Client not authorized | Check `pending-authorizations` returns the client; check Node.js agent logs |
-| MAC address missing | Verify Omada portal URL includes `clientMac` parameter |
-| Edge function errors | Check logs in Lovable Cloud backend panel |
-
----
-
-## Development
-
-```bash
-npm install
-npm run dev
-```
-
-## Deployment
-
-Click **Share → Publish** in Lovable to deploy. Edge functions deploy automatically.
-
----
-
-*For support, contact your development team or consult Safaricom M-Pesa API docs and TP-Link Omada Controller API docs.*
+| STK push not received | Check phone format (must be 254...) |
+| Payment stuck | Check edge function logs in Lovable Cloud |
+| Client not authorized | Check Node.js agent console for errors |
+| MAC missing | Verify Omada portal URL has `clientMac` param |
+| Voucher invalid | Check voucher exists in DB with status `unused` |
+| Agent can't reach Omada | Verify IP/port and credentials in CONFIG |
