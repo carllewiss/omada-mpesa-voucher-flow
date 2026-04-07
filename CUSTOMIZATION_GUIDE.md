@@ -82,7 +82,7 @@ https://omada-mpesa-voucher-flow.lovable.app/?clientMac=<clientMac>&clientIp=<cl
 1. Download `omada-polling-agent.js` from the documents
 2. Install dependencies:
    ```bash
-   npm install express node-fetch@2
+   npm install express node-fetch@2 multer csv-parser
    ```
 3. Edit the **CONFIG** section in the script:
    ```javascript
@@ -107,7 +107,28 @@ https://omada-mpesa-voucher-flow.lovable.app/?clientMac=<clientMac>&clientIp=<cl
 ### Dashboard Features
 - **Daily Report**: Today's payments, revenue, receipts
 - **Weekly Report**: Week summary with daily breakdown and top payers
+- **Vouchers**: View all vouchers (used/unused), filter & search, upload CSV, download template
 - **Agent Stats**: Live polling status and authorization counts
+
+### Voucher Management (Dashboard)
+
+1. Click the **🎟️ Vouchers** tab on the dashboard
+2. **View vouchers**: See all vouchers with status (UNUSED/USED), filter by status, search by code
+3. **Download CSV Template**: Click **📥 Download CSV Template** to get a sample CSV
+4. **Upload Vouchers**: Click **📤 Upload Vouchers CSV** to bulk-add vouchers
+
+#### CSV Template Format
+```csv
+code,package_type,duration_hours
+WIFI-0001,2hour,2
+WIFI-0002,24hour,24
+```
+
+| Column | Required | Description |
+|---|---|---|
+| `code` | Yes | Unique voucher code (e.g., `WIFI-1234`) |
+| `package_type` | No | `2hour` or `24hour` (default: `2hour`) |
+| `duration_hours` | No | `2` or `24` (auto-detected from package_type) |
 
 ### What the Agent Does
 1. Every 5 seconds, calls `GET /functions/v1/pending-authorizations`
