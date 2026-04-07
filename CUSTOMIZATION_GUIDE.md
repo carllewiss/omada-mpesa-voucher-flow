@@ -82,7 +82,7 @@ https://omada-mpesa-voucher-flow.lovable.app/?clientMac=<clientMac>&clientIp=<cl
 1. Download `omada-polling-agent.js` from the documents
 2. Install dependencies:
    ```bash
-   npm install express node-fetch@2
+   npm install express node-fetch@2 multer csv-parser
    ```
 3. Edit the **CONFIG** section in the script:
    ```javascript
