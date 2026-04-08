@@ -103,3 +103,8 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Hide Lovable badge globally */
+#lovable-badge {
+  display: none !important;
+}

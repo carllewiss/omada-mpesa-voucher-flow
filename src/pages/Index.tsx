@@ -290,8 +290,8 @@ const Index = () => {
                       type="text"
                       placeholder="e.g. WIFI-1234"
                       value={voucherCode}
-                      onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                      className="border-purple-200 focus:border-purple-400 bg-white font-mono text-base tracking-wider uppercase"
+                      onChange={(e) => setVoucherCode(e.target.value)}
+                      className="border-purple-200 focus:border-purple-400 bg-white font-mono text-base tracking-wider"
                     />
                     <Button
                       onClick={handleVoucherSubmit}
