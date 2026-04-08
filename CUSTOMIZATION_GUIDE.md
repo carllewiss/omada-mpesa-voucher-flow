@@ -96,6 +96,10 @@ https://omada-mpesa-voucher-flow.lovable.app/?clientMac=<clientMac>&clientIp=<cl
      OMADA_SITE: 'Default',                    // Your site name
      OMADA_USERNAME: 'admin',                  // Your login
      OMADA_PASSWORD: 'admin',                  // Your password
+
+     // OMADA VOUCHER SYNC (optional):
+     OMADA_VOUCHER_SYNC_ENABLED: false,        // Set true to auto-pull vouchers from Omada
+     OMADA_VOUCHER_SYNC_INTERVAL_MS: 60000,    // How often to sync (default: 60s)
    };
    ```
 4. Run:
@@ -104,18 +108,50 @@ https://omada-mpesa-voucher-flow.lovable.app/?clientMac=<clientMac>&clientIp=<cl
    ```
 5. Open **http://localhost:3000** for the dashboard
 
+### Running as a Service (Auto-Start on Reboot)
+
+**Using PM2 (Recommended):**
+```bash
+npm install -g pm2
+pm2 start omada-polling-agent.js --name "omada-agent"
+pm2 startup    # Follow the command it prints
+pm2 save       # Save current process list
+```
+
+**Useful PM2 commands:**
+```bash
+pm2 status              # Check status
+pm2 logs omada-agent    # View logs
+pm2 restart omada-agent # Restart
+pm2 stop omada-agent    # Stop
+```
+
 ### Dashboard Features
 - **Daily Report**: Today's payments, revenue, receipts
 - **Weekly Report**: Week summary with daily breakdown and top payers
-- **Vouchers**: View all vouchers (used/unused), filter & search, upload CSV, download template
+- **Vouchers**: View all vouchers (used/unused/expired), filter & search, upload CSV, download template, sync from Omada
 - **Agent Stats**: Live polling status and authorization counts
 
-### Voucher Management (Dashboard)
+---
+
+## Voucher Management
+
+### Portal Voucher Input
+- Voucher codes are **case-sensitive** — they are submitted exactly as entered (no auto-uppercase)
+- The portal checks if the code exists and is `unused`
+- If valid: marks the voucher as `used`, records the client's MAC, creates an authorization record
+- The Node.js agent then picks it up and authorizes the MAC on the Omada Controller
+
+### Dashboard Voucher Tab
 
 1. Click the **🎟️ Vouchers** tab on the dashboard
-2. **View vouchers**: See all vouchers with status (UNUSED/USED), filter by status, search by code
-3. **Download CSV Template**: Click **📥 Download CSV Template** to get a sample CSV
-4. **Upload Vouchers**: Click **📤 Upload Vouchers CSV** to bulk-add vouchers
+2. **View vouchers**: See all vouchers with status (UNUSED / ACTIVE / EXPIRED)
+3. **Filter**: By status — All, Unused, Used (Active), Expired
+4. **Search**: By voucher code
+5. **Remaining time**: Active vouchers show time remaining
+6. **Download CSV Template**: Click **📥 Download CSV Template**
+7. **Upload Vouchers**: Click **📤 Upload Vouchers CSV** to bulk-add vouchers
+8. **Sync from Omada**: Click **🔄 Sync from Omada** to pull vouchers from Omada Controller
 
 #### CSV Template Format
 ```csv
@@ -126,15 +162,52 @@ WIFI-0002,24hour,24
 
 | Column | Required | Description |
 |---|---|---|
-| `code` | Yes | Unique voucher code (e.g., `WIFI-1234`) |
+| `code` | Yes | Unique voucher code (case-sensitive, e.g., `WIFI-1234`) |
 | `package_type` | No | `2hour` or `24hour` (default: `2hour`) |
 | `duration_hours` | No | `2` or `24` (auto-detected from package_type) |
 
-### What the Agent Does
-1. Every 5 seconds, calls `GET /functions/v1/pending-authorizations`
-2. Gets clients where `payment_status=paid` and `authorization_status=no`
-3. Authorizes each MAC address on Omada Controller
-4. Calls `POST /functions/v1/update-authorization` to mark `authorization_status=yes`
+### Omada Voucher Sync
+
+The agent can automatically pull vouchers from your Omada Controller's built-in voucher system:
+
+1. Set `OMADA_VOUCHER_SYNC_ENABLED: true` in CONFIG
+2. The agent will check Omada every 60 seconds (configurable via `OMADA_VOUCHER_SYNC_INTERVAL_MS`)
+3. New vouchers are imported into the cloud database, skipping duplicates
+4. You can also trigger a manual sync from the dashboard: **🔄 Sync from Omada** button
+
+### Voucher Expiry & Timeout
+
+- Each voucher has a `duration_hours` (2 or 24 hours)
+- Once redeemed, the countdown starts from `used_at`
+- The agent checks expiry every 30 seconds
+- **Active vouchers**: Show remaining time on the dashboard
+- **Expired vouchers**: Marked as EXPIRED on the dashboard
+- Omada Controller auto-deauthorizes clients when the authorized duration elapses
+
+---
+
+## Re-Authentication (Disconnected Clients)
+
+If a client gets disconnected before their paid time expires, the system **automatically re-authorizes** them:
+
+1. Client reconnects to WiFi → redirected to captive portal with MAC params
+2. Portal checks `client_authorizations` for an active session matching the MAC
+3. If a valid (unexpired) session exists, a new authorization record is inserted
+4. The Node.js agent picks it up and re-authorizes the MAC on Omada
+5. Client skips the payment screen entirely
+
+**This applies to both M-Pesa payments and voucher redemptions.** No action needed — fully automatic.
+
+---
+
+## Payment Flow
+
+1. Client connects to WiFi → redirected to captive portal with MAC/IP params
+2. Client selects package + enters M-Pesa number (or voucher code)
+3. M-Pesa: STK push → payment → callback → record saved
+4. Voucher: code validated → marked used → record saved
+5. Both paths insert into `client_authorizations` with `paid` + `auth=no`
+6. Local Node.js agent picks up record → authorizes on Omada → updates to `auth=yes`
 
 ---
 
@@ -167,11 +240,12 @@ WIFI-0002,24hour,24
 ### `vouchers` — Voucher codes
 | Column | Description |
 |---|---|
-| `code` | Unique voucher code |
+| `code` | Unique voucher code (case-sensitive) |
 | `package_type` | `2hour` or `24hour` |
 | `duration_hours` | 2 or 24 |
 | `status` | `unused` or `used` |
 | `used_by_mac` | MAC of client who used it |
+| `used_at` | Timestamp when redeemed |
 
 ### Inserting Vouchers Manually
 
@@ -244,31 +318,8 @@ Production credentials stored as secrets (Paybill **4183147**):
 | Page title | `index.html` — `<title>` tag |
 | Support phone | `src/pages/Index.tsx` — search for `0736217411` and update |
 | WhatsApp link | `src/pages/Index.tsx` — search for `254736217411` and update |
-
----
-
-## Re-Authentication (Disconnected Clients)
-
-If a client gets disconnected before their paid time expires, the system **automatically re-authorizes** them:
-
-1. Client reconnects to WiFi → redirected to captive portal with MAC params
-2. Portal checks `client_authorizations` for an active session matching the MAC
-3. If a valid (unexpired) session exists, a new authorization record is inserted
-4. The Node.js agent picks it up and re-authorizes the MAC on Omada
-5. Client skips the payment screen entirely
-
-**No action needed** — this is fully automatic. The client sees the "Connected" screen instead of the payment form.
-
----
-
-## Payment Flow
-
-1. Client connects to WiFi → redirected to captive portal with MAC/IP params
-2. Client selects package + enters M-Pesa number (or voucher code)
-3. M-Pesa: STK push → payment → callback → record saved
-4. Voucher: code validated → marked used → record saved
-5. Both paths insert into `client_authorizations` with `paid` + `auth=no`
-6. Local Node.js agent picks up record → authorizes on Omada → updates to `auth=yes`
+| Hide Lovable badge | Already hidden via CSS in `src/index.css` (`#lovable-badge { display: none }`) |
+| Voucher case | Codes are case-sensitive by default — no auto-uppercase |
 
 ---
 
@@ -280,6 +331,8 @@ If a client gets disconnected before their paid time expires, the system **autom
 | Payment stuck | Check edge function logs in Lovable Cloud |
 | Client not authorized | Check Node.js agent console for errors |
 | MAC missing | Verify Omada portal URL has `clientMac` param |
-| Voucher invalid | Check voucher exists in DB with status `unused` |
+| Voucher invalid | Check voucher exists in DB with status `unused` — codes are case-sensitive |
 | Agent can't reach Omada | Verify IP/port and credentials in CONFIG |
 | Client asked to pay again | Check re-auth: MAC must match and time not expired |
+| Omada voucher sync empty | Check Omada has vouchers configured and sync is enabled in CONFIG |
+| Voucher showing expired | The duration_hours has elapsed since `used_at` — this is expected |
