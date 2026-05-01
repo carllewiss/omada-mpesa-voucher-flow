@@ -91,14 +91,19 @@ https://omada-mpesa-voucher-flow.lovable.app/?clientMac=<clientMac>&clientIp=<cl
      SUPABASE_URL: 'https://tyqcalkdvsmeczbbqfns.supabase.co',
      SUPABASE_ANON_KEY: '...already filled...',
 
-     // CHANGE THESE to match your Omada Controller:
-     OMADA_URL: 'https://192.168.0.1:8043',  // Your controller IP
+     // Web-login (used to authorize client MACs):
+     OMADA_URL: 'https://192.168.0.3:8043',   // Your controller IP
      OMADA_SITE: 'Default',                    // Your site name
      OMADA_USERNAME: 'admin',                  // Your login
-     OMADA_PASSWORD: 'admin',                  // Your password
+     OMADA_PASSWORD: 'Data@521515',            // Your password
 
-     // OMADA VOUCHER SYNC (optional):
-     OMADA_VOUCHER_SYNC_ENABLED: false,        // Set true to auto-pull vouchers from Omada
+     // Open API (used to pull vouchers — see "Omada Open API Setup" below):
+     OMADA_OPENAPI_CLIENT_ID: '',              // From Omada → Open API app
+     OMADA_OPENAPI_CLIENT_SECRET: '',          // From Omada → Open API app
+     OMADA_OPENAPI_VOUCHER_GROUP: '',          // Blank = pull from ALL groups
+
+     // Voucher sync:
+     OMADA_VOUCHER_SYNC_ENABLED: true,         // Auto-pull vouchers from Omada
      OMADA_VOUCHER_SYNC_INTERVAL_MS: 60000,    // How often to sync (default: 60s)
    };
    ```
@@ -168,12 +173,34 @@ WIFI-0002,24hour,24
 
 ### Omada Voucher Sync
 
-The agent can automatically pull vouchers from your Omada Controller's built-in voucher system:
+The agent automatically pulls vouchers from your Omada Controller using the **Omada Open API**.
 
-1. Set `OMADA_VOUCHER_SYNC_ENABLED: true` in CONFIG
-2. The agent will check Omada every 60 seconds (configurable via `OMADA_VOUCHER_SYNC_INTERVAL_MS`)
-3. New vouchers are imported into the cloud database, skipping duplicates
-4. You can also trigger a manual sync from the dashboard: **🔄 Sync from Omada** button
+#### Omada Open API Setup (one-time)
+
+1. Log in to your Omada Controller web UI
+2. Go to **Settings → Platform Integration → Open API**
+3. Click **Add New App**, give it a name (e.g. `4K Billing Agent`)
+4. Grant it **Hotspot Manager** permission for your site
+5. Copy the **Client ID** and **Client Secret** into the agent's CONFIG:
+   ```javascript
+   OMADA_OPENAPI_CLIENT_ID: 'your-client-id',
+   OMADA_OPENAPI_CLIENT_SECRET: 'your-client-secret',
+   ```
+6. (Optional) Set `OMADA_OPENAPI_VOUCHER_GROUP` to a single group name to limit sync to that group
+
+#### How the sync works
+
+The agent follows the official Omada Open API workflow:
+
+1. **Login & Token** — `POST /openapi/authorize/token` → returns `AccessToken`
+2. **Get Voucher Groups** — `GET /openapi/v1/{omadacId}/sites/{siteId}/hotspot/voucher-groups`
+3. **Retrieve Vouchers** — `GET /openapi/v1/{omadacId}/sites/{siteId}/hotspot/voucher-groups/{groupId}`
+
+- Runs every 60 seconds (configurable via `OMADA_VOUCHER_SYNC_INTERVAL_MS`)
+- Imports new vouchers into the cloud database (skips duplicates)
+- Maps Omada status to `unused` / `used` automatically
+- Tokens are cached and auto-refreshed on expiry
+- You can trigger a manual sync from the dashboard: **🔄 Sync from Omada** button
 
 ### Voucher Expiry & Timeout
 
