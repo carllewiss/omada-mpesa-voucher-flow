@@ -1,9 +1,19 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+};
+
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     const body = await req.json();
     console.log('M-Pesa callback received:', JSON.stringify(body));
@@ -11,7 +21,7 @@ Deno.serve(async (req) => {
     const callback = body?.Body?.stkCallback;
     if (!callback) {
       return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' }), {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
@@ -49,12 +59,12 @@ Deno.serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Callback error:', error);
     return new Response(JSON.stringify({ ResultCode: 0, ResultDesc: 'Accepted' }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
