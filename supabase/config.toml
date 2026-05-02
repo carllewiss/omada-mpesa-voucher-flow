@@ -1,1 +1,10 @@
 project_id = "tyqcalkdvsmeczbbqfns"
+
+[functions.portal-mpesa-initiate]
+verify_jwt = false
+
+[functions.portal-mpesa-poll]
+verify_jwt = false
+
+[functions.portal-redeem-voucher]
+verify_jwt = false
