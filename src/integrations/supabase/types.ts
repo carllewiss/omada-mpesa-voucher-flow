@@ -68,6 +68,30 @@ export type Database = {
         }
         Relationships: []
       }
+      package_pricing: {
+        Row: {
+          display_name: string
+          duration_hours: number
+          package_type: string
+          price_kes: number
+          updated_at: string
+        }
+        Insert: {
+          display_name: string
+          duration_hours: number
+          package_type: string
+          price_kes: number
+          updated_at?: string
+        }
+        Update: {
+          display_name?: string
+          duration_hours?: number
+          package_type?: string
+          price_kes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
@@ -116,6 +140,7 @@ export type Database = {
           created_at: string
           duration_hours: number
           id: string
+          is_used: boolean
           package_type: string
           status: string
           used_at: string | null
@@ -126,6 +151,7 @@ export type Database = {
           created_at?: string
           duration_hours?: number
           id?: string
+          is_used?: boolean
           package_type?: string
           status?: string
           used_at?: string | null
@@ -136,6 +162,7 @@ export type Database = {
           created_at?: string
           duration_hours?: number
           id?: string
+          is_used?: boolean
           package_type?: string
           status?: string
           used_at?: string | null
@@ -148,7 +175,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      claim_voucher_for_package: {
+        Args: { _client_mac?: string; _package_type: string }
+        Returns: {
+          code: string
+          duration_hours: number
+          package_type: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
