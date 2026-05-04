@@ -123,6 +123,21 @@
     </div>
   </div>
 
+  <!-- Connected screen: shown after Omada auth succeeds. Countdown then redirect. -->
+  <div id="connected-overlay" class="overlay" aria-hidden="true">
+    <div class="overlay-card success">
+      <div class="check-circle">✓</div>
+      <h2>You're Connected!</h2>
+      <p>Package: <strong id="connected-package">—</strong></p>
+      <p class="muted">Enjoy your internet from 4K Smart Solutions</p>
+      <div class="timer-wrap">
+        <div class="timer-bar"><div id="connected-bar-fill"></div></div>
+        <div class="timer-text">Redirecting in <span id="connected-timer">5</span>s</div>
+      </div>
+      <button id="go-now" type="button" class="ghost">Go now</button>
+    </div>
+  </div>
+
   <script src="index.js"></script>
 </body>
 </html>

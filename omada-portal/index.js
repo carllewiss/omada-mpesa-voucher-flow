@@ -1,20 +1,16 @@
 /* 4K Smart Solutions — Omada Internal Portal frontend
- * - Voucher + M-Pesa only (no username/password)
- * - Talks to Supabase Edge Functions
- * - Server decides price; client only sends packageType
- * - On success: fills Omada native form (#voucherCode + clientMac) and submits /portal/auth
+ * - Vouchers: validated DIRECTLY by Omada (/portal/auth, authType=3). No Supabase call.
+ * - M-Pesa: hits Supabase Edge Functions; on success, the issued voucher is auto-submitted to Omada.
+ * - After Omada confirms auth, show "Connected" screen with package + countdown, then redirect.
  */
 (() => {
   'use strict';
 
-  // ============ EDIT THESE TWO IF YOUR PROJECT REF CHANGES ============
   const SUPABASE_URL = 'https://tyqcalkdvsmeczbbqfns.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5cWNhbGtkdnNtZWN6YmJxZm5zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3NDUxNTYsImV4cCI6MjA4NjMyMTE1Nn0.VTgZPClT7Te2R-9Y6zvtVyDj6pVWRvX7svvvLSx3fcw';
-  // ====================================================================
+  const FN = (n) => `${SUPABASE_URL}/functions/v1/${n}`;
 
-  const FN = (name) => `${SUPABASE_URL}/functions/v1/${name}`;
-
-  // ---------- Omada URL params (always present in real captive portal) ----------
+  // Omada URL params
   const qs = new URLSearchParams(window.location.search);
   const clientMac  = qs.get('clientMac')  || '';
   const apMac      = qs.get('apMac')      || '';
@@ -24,18 +20,17 @@
   const vid        = qs.get('vid')        || '';
   const originUrl  = qs.get('originUrl')  || '';
 
-  // Each visitor session is unique to avoid two concurrent payers crossing wires.
   const sessionId = (crypto.randomUUID && crypto.randomUUID()) ||
     (Date.now() + '-' + Math.random().toString(36).slice(2));
 
-  // ---------- Packages (display only — server validates the real price) ----------
   const PACKAGES = [
     { id: '2hour',  name: '2-Hour Package',  duration: '2 Hours',  price: 10 },
     { id: '24hour', name: '24-Hour Package', duration: '24 Hours', price: 30 },
   ];
   let selected = PACKAGES[0];
+  // Tracks the package label used for the connected screen (set when M-Pesa succeeds OR voucher redeems)
+  let connectedPackageLabel = '';
 
-  // ---------- DOM helpers ----------
   const $ = (id) => document.getElementById(id);
   const setHint = (msg, ok) => {
     const el = $('hint');
@@ -45,7 +40,6 @@
     el.style.display = 'block';
   };
 
-  // ---------- HTTP helper ----------
   async function call(fnName, body) {
     const res = await fetch(FN(fnName), {
       method: 'POST',
@@ -60,7 +54,6 @@
     return { ok: res.ok, status: res.status, data };
   }
 
-  // ---------- Render package picker ----------
   function renderPackages() {
     const root = $('packages');
     root.innerHTML = PACKAGES.map(p => `
@@ -79,11 +72,11 @@
     });
   }
 
-  // ---------- Omada auto-login (THE MAGIC) ----------
-  // Fills the native Omada form's voucherCode field with the issued voucher
-  // and submits to the controller. Per Omada docs, /portal/auth accepts
-  // form-encoded POSTs from the Internal Portal context.
-  function autoLoginWithVoucher(voucher) {
+  // ---------- Omada direct auth (vouchers + post-payment) ----------
+  // Submits voucher straight to the controller's Internal Portal endpoint.
+  // Returns: { ok: true } on success, { ok: false, error, code } otherwise.
+  async function omadaVoucherAuth(voucher) {
+    // Mirror values to the hidden form (debug + fallback submit)
     $('voucherCode').value = voucher;
     $('cMac').value  = clientMac;
     $('aMac').value  = apMac;
@@ -93,7 +86,6 @@
     $('vId').value   = vid;
     $('oUrl').value  = originUrl;
 
-    // Build Omada auth payload
     const payload = {
       authType: 3, // VOUCHER
       voucherCode: voucher,
@@ -103,31 +95,24 @@
       originUrl,
     };
 
-    fetch('/portal/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-      .then(r => r.json().catch(() => ({})))
-      .then(res => {
-        if (res && res.errorCode === 0) {
-          window.location.href = res.result || originUrl || 'https://www.google.com';
-        } else {
-          setHint('Authorization failed. Please try again. (' + (res && res.errorCode) + ')');
-          hideOverlay('success-overlay');
-        }
-      })
-      .catch(() => {
-        // Some controllers expect form-encoded — fall back to native submit
-        $('omada-form').setAttribute('action', '/portal/auth');
-        $('omada-form').setAttribute('method', 'POST');
-        $('omada-form').submit();
+    try {
+      const r = await fetch('/portal/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
+      const res = await r.json().catch(() => ({}));
+      if (res && res.errorCode === 0) return { ok: true, result: res.result };
+      return { ok: false, error: res && (res.msg || res.errorMessage), code: res && res.errorCode };
+    } catch (e) {
+      return { ok: false, error: 'Network error contacting controller' };
+    }
   }
 
   // ---------- Overlays ----------
   let countdownInterval = null;
   let pollInterval = null;
+  let connectedInterval = null;
 
   function showOverlay(id) { const el = $(id); el.classList.add('show'); el.setAttribute('aria-hidden', 'false'); }
   function hideOverlay(id) { const el = $(id); el.classList.remove('show'); el.setAttribute('aria-hidden', 'true'); }
@@ -137,7 +122,6 @@
     $('timer').textContent = total;
     $('timer-bar-fill').style.width = '100%';
     showOverlay('payment-overlay');
-
     let left = total;
     countdownInterval = setInterval(() => {
       left -= 1;
@@ -157,47 +141,75 @@
     $('pay-btn').disabled = false;
   }
 
-  function showSuccess(code) {
+  function showSuccessThenAuth(code) {
     $('success-code').textContent = code;
     hideOverlay('payment-overlay');
     showOverlay('success-overlay');
-    setTimeout(() => autoLoginWithVoucher(code), 1200);
+    setTimeout(async () => {
+      const r = await omadaVoucherAuth(code);
+      hideOverlay('success-overlay');
+      if (r.ok) {
+        showConnected(connectedPackageLabel || selected.name, r.result);
+      } else {
+        setHint(`Authorization failed${r.code != null ? ' (code ' + r.code + ')' : ''}: ${r.error || 'Please try again.'}`);
+      }
+    }, 900);
   }
 
-  // ---------- Voucher redeem ----------
+  function showConnected(pkgLabel, redirectFromController) {
+    $('connected-package').textContent = pkgLabel || 'Internet Access';
+    const target = redirectFromController || originUrl || 'https://www.google.com';
+    const total = 5;
+    let left = total;
+    $('connected-timer').textContent = left;
+    $('connected-bar-fill').style.width = '100%';
+    showOverlay('connected-overlay');
+
+    connectedInterval = setInterval(() => {
+      left -= 1;
+      $('connected-timer').textContent = Math.max(0, left);
+      $('connected-bar-fill').style.width = ((left / total) * 100) + '%';
+      if (left <= 0) {
+        clearInterval(connectedInterval); connectedInterval = null;
+        window.location.href = target;
+      }
+    }, 1000);
+
+    $('go-now').onclick = () => {
+      if (connectedInterval) { clearInterval(connectedInterval); connectedInterval = null; }
+      window.location.href = target;
+    };
+  }
+
+  // ---------- Voucher (DIRECT to Omada — no backend call) ----------
   $('redeem-btn').addEventListener('click', async () => {
     const code = $('voucher-input').value.trim();
     if (!code) { setHint('Please enter a voucher code'); return; }
     setHint('');
     $('redeem-btn').disabled = true;
-    $('redeem-btn').textContent = 'Checking…';
+    $('redeem-btn').textContent = 'Connecting…';
     try {
-      const { ok, data } = await call('portal-redeem-voucher', {
-        code, clientMac, apMac, ssid: ssidName,
-      });
-      if (ok && data.success) {
-        setHint('Voucher accepted! Connecting…', true);
-        showSuccess(data.voucher.code);
+      // Voucher does not know its package label up front — use a generic label.
+      connectedPackageLabel = 'Voucher Access';
+      const r = await omadaVoucherAuth(code);
+      if (r.ok) {
+        showConnected(connectedPackageLabel, r.result);
       } else {
-        setHint(data.error || 'Invalid voucher.');
+        setHint(r.error || `Voucher rejected by controller${r.code != null ? ' (code ' + r.code + ')' : ''}.`);
       }
-    } catch (e) {
-      setHint('Network error. Please try again.');
     } finally {
       $('redeem-btn').disabled = false;
       $('redeem-btn').textContent = 'Redeem';
     }
   });
 
-  // ---------- M-Pesa pay ----------
+  // ---------- M-Pesa (uses Supabase) ----------
   $('pay-btn').addEventListener('click', async () => {
     const phone = $('phone').value.trim();
     if (!phone || phone.length < 10) { setHint('Please enter a valid M-Pesa number'); return; }
     setHint('');
     $('pay-btn').disabled = true;
 
-    // NOTE: We deliberately do NOT send `amount`/`price`. The Edge Function
-    // looks up the price from `package_pricing` based on packageType.
     const { ok, data } = await call('portal-mpesa-initiate', {
       phoneNumber: phone,
       packageType: selected.id,
@@ -210,6 +222,7 @@
       return;
     }
 
+    connectedPackageLabel = selected.name;
     startPaymentOverlay(phone, 90);
     pollPayment(data.checkoutRequestId);
   });
@@ -219,7 +232,6 @@
     setHint('Payment cancelled. You can try again.');
   });
 
-  // ---------- Poll payment status ----------
   function pollPayment(checkoutRequestId) {
     let attempts = 0;
     pollInterval = setInterval(async () => {
@@ -229,7 +241,7 @@
       if (data.status === 'success') {
         clearInterval(pollInterval); pollInterval = null;
         if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
-        showSuccess(data.voucher);
+        showSuccessThenAuth(data.voucher);
       } else if (data.status === 'failed') {
         stopPaymentFlow();
         setHint(data.error || 'Payment failed. Please try again.');
@@ -245,11 +257,9 @@
   renderPackages();
   $('pay-btn-text').textContent = `Pay KSh ${selected.price} — ${selected.name}`;
 
-  // Pre-fill the hidden Omada inputs so manual debug submits work too
   $('cMac').value = clientMac; $('aMac').value = apMac; $('gMac').value = gatewayMac;
   $('sName').value = ssidName; $('rId').value = radioId; $('vId').value = vid; $('oUrl').value = originUrl;
 
-  // Friendly visibility ping — tab title flicker keeps mobile WebView "alive"
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) document.title = '⏳ Confirm M-Pesa…';
     else document.title = '4K Smart Solutions — Internet Access';
