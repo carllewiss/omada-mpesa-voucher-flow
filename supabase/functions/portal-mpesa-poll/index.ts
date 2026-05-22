@@ -1,4 +1,6 @@
-// Portal: Poll payment status; on confirmed payment, atomically claim a voucher and return it.
+// Portal: Poll payment status.
+// On confirmed payment, RESERVE (not consume) a voucher and return it.
+// Voucher is only marked permanently 'used' after portal-confirm-auth confirms connectivity.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
 
 const corsHeaders = {
@@ -8,13 +10,29 @@ const corsHeaders = {
 };
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+// Map transactions.status -> portal state for the frontend state machine.
+function toPortalStatus(s: string): string {
+  switch (s) {
+    case 'success':
+    case 'paid':              return 'paid';
+    case 'pending':           return 'pending';
+    case 'cancelled':         return 'cancelled';
+    case 'insufficient_funds':return 'insufficient_funds';
+    case 'timeout':           return 'timeout';
+    case 'invalid_pin':       return 'invalid_pin';
+    case 'expired':           return 'expired';
+    case 'failed':            return 'failed';
+    default:                  return s;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { checkoutRequestId, clientMac } = await req.json();
+    const { checkoutRequestId, clientMac, sessionId } = await req.json();
     if (!checkoutRequestId) {
       return new Response(JSON.stringify({ error: 'checkoutRequestId required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -22,6 +40,9 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+
+    // Best-effort: release any expired reservations back into the pool
+    await supabase.rpc('release_expired_reservations');
 
     const { data: tx } = await supabase
       .from('transactions')
@@ -35,70 +56,70 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (tx.status === 'pending') {
+    const mapped = toPortalStatus(tx.status);
+
+    // Terminal failure states
+    if (['failed','cancelled','insufficient_funds','timeout','invalid_pin','expired'].includes(mapped)) {
+      return new Response(JSON.stringify({
+        status: mapped,
+        error: tx.result_desc || 'Payment did not complete.',
+        resultCode: tx.result_code,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (mapped === 'pending') {
       return new Response(JSON.stringify({ status: 'pending' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    if (tx.status === 'failed' || tx.status === 'cancelled') {
-      return new Response(JSON.stringify({ status: 'failed', error: tx.result_desc || 'Payment failed' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    if (mapped === 'paid') {
+      // Reserve a voucher (idempotent — returns the same one if already reserved/used for this tx)
+      const { data: reserved, error: resErr } = await supabase.rpc('reserve_voucher_for_transaction', {
+        _transaction_id: tx.id,
+        _package_type:   tx.package_type,
+        _client_mac:     clientMac || tx.client_mac || null,
+        _session_id:     sessionId  || tx.session_id || null,
+        _hold_minutes:   10,
       });
-    }
 
-    if (tx.status === 'success' || tx.status === 'paid') {
-      // If a voucher was already issued for this transaction, return it (idempotent)
-      const { data: existingAuth } = await supabase
-        .from('client_authorizations')
-        .select('mpesa_receipt, package_type, duration_hours')
-        .eq('checkout_request_id', checkoutRequestId)
-        .maybeSingle();
-
-      if (existingAuth?.mpesa_receipt && existingAuth.mpesa_receipt.startsWith('VC-')) {
-        const code = existingAuth.mpesa_receipt.substring(3);
-        return new Response(JSON.stringify({
-          status: 'success', voucher: code,
-          durationHours: existingAuth.duration_hours,
-          packageType: existingAuth.package_type,
-        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      }
-
-      // Atomically claim ONE unused voucher for this package
-      const { data: claimed, error: claimErr } = await supabase
-        .rpc('claim_voucher_for_package', {
-          _package_type: tx.package_type,
-          _client_mac: clientMac || null,
-        });
-
-      if (claimErr || !claimed || claimed.length === 0) {
+      if (resErr || !reserved || reserved.length === 0) {
         return new Response(JSON.stringify({
           status: 'no_voucher',
-          error: 'Payment received but no vouchers available. Please contact support.',
+          error: 'Payment received but no vouchers are currently available. Please contact support — your money is safe.',
         }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      const v = claimed[0];
+      const v = reserved[0];
+
+      await supabase.from('transactions')
+        .update({
+          voucher_code: v.code,
+          client_mac: clientMac || tx.client_mac || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', tx.id);
 
       await supabase
         .from('client_authorizations')
         .update({
           payment_status: 'paid',
           mpesa_receipt: `VC-${v.code}`,
-          mac_address: clientMac || null,
+          mac_address: clientMac || tx.client_mac || null,
           updated_at: new Date().toISOString(),
         })
         .eq('checkout_request_id', checkoutRequestId);
 
       return new Response(JSON.stringify({
-        status: 'success',
+        status: 'paid',
         voucher: v.code,
         durationHours: v.duration_hours,
         packageType: v.package_type,
+        transactionId: tx.id,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ status: tx.status }), {
+    return new Response(JSON.stringify({ status: mapped }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
