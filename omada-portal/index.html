@@ -103,9 +103,20 @@
       <div class="pulse-ring">
         <div class="pulse-dot"></div>
       </div>
-      <h2>Confirm on your phone</h2>
-      <p>An M-Pesa prompt has been sent to <strong id="pay-phone"></strong>.</p>
-      <p class="muted">Enter your M-Pesa PIN to authorize the payment.</p>
+      <h2 id="pay-title">Confirm on your phone</h2>
+      <p id="pay-sub">An M-Pesa prompt has been sent to <strong id="pay-phone"></strong>.</p>
+      <p class="muted" id="pay-muted">Enter your M-Pesa PIN to authorize the payment.</p>
+
+      <!-- Live state timeline -->
+      <ul id="state-timeline" class="timeline">
+        <li data-step="stk"      class="pending"><span class="bullet"></span><span class="label">Sending STK Push</span></li>
+        <li data-step="prompt"   class="pending"><span class="bullet"></span><span class="label">Waiting for M-Pesa PIN</span></li>
+        <li data-step="paid"     class="pending"><span class="bullet"></span><span class="label">Payment confirmed</span></li>
+        <li data-step="reserve"  class="pending"><span class="bullet"></span><span class="label">Reserving voucher</span></li>
+        <li data-step="auth"     class="pending"><span class="bullet"></span><span class="label">Connecting to WiFi</span></li>
+        <li data-step="online"   class="pending"><span class="bullet"></span><span class="label">Verifying internet</span></li>
+      </ul>
+
       <div class="timer-wrap">
         <div class="timer-bar"><div id="timer-bar-fill"></div></div>
         <div class="timer-text">Waiting <span id="timer">90</span>s</div>
