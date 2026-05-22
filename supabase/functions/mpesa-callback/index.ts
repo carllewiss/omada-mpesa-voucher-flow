@@ -39,18 +39,29 @@ Deno.serve(async (req) => {
           status: 'success',
           mpesa_receipt: receipt,
           result_desc: ResultDesc,
+          result_code: 0,
           updated_at: new Date().toISOString(),
         })
         .eq('checkout_request_id', CheckoutRequestID);
 
       console.log('Payment successful:', CheckoutRequestID, receipt);
     } else {
-      // Payment failed or cancelled
+      // Granular failure mapping per Daraja result codes
+      let status: string;
+      switch (ResultCode) {
+        case 1:    status = 'insufficient_funds'; break;
+        case 1032: status = 'cancelled';          break;
+        case 1037: status = 'timeout';            break;
+        case 2001: status = 'invalid_pin';        break;
+        case 1019: status = 'expired';            break;
+        default:   status = 'failed';
+      }
       await supabase
         .from('transactions')
         .update({
-          status: ResultCode === 1032 ? 'cancelled' : 'failed',
+          status,
           result_desc: ResultDesc,
+          result_code: ResultCode,
           updated_at: new Date().toISOString(),
         })
         .eq('checkout_request_id', CheckoutRequestID);
