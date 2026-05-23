@@ -218,100 +218,39 @@
 
   async function onPaidIssueAndConnect(voucher, transactionId) {
     activeTransactionId = transactionId || activeTransactionId;
-    // Persist last paid transaction locally so even a full page crash can recover
-    // without waiting for the resume-by-MAC backend lookup.
-    try {
-      localStorage.setItem('4ksmart_last_paid', JSON.stringify({
-        transactionId: activeTransactionId,
-        voucher,
-        clientMac,
-        packageLabel: connectedPackageLabel || selected.name,
-        ts: Date.now(),
-      }));
-    } catch (_) {}
-
     markStepsThrough('auth');
     setOverlayCopy('Payment received', 'Voucher issued. Connecting you to WiFi…', 'Please keep this page open.');
 
-    // Submit voucher straight to Omada — RETRY with backoff so a single
-    // dropped packet / weak signal doesn't force the user to pay again.
-    // Voucher remains RESERVED to this MAC on the backend the whole time.
-    const MAX_ATTEMPTS = 6;
-    let auth = { ok: false };
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      setOverlayCopy(
-        'Connecting to WiFi',
-        `Submitting your voucher to the controller… (attempt ${attempt}/${MAX_ATTEMPTS})`,
-        'Voucher is locked to this device — you will not be charged again.'
-      );
-      auth = await omadaVoucherAuth(voucher);
-      if (auth.ok) break;
-      // Wait with exponential backoff before retrying (1.5s, 3s, 4.5s, 6s, 7.5s)
-      await new Promise(r => setTimeout(r, 1500 * attempt));
-    }
-
+    // Submit voucher straight to Omada
+    const auth = await omadaVoucherAuth(voucher);
     if (!auth.ok) {
       markStepsErrorAt('auth');
       stopPaymentFlow();
-      setHint(
-        `Could not connect after ${MAX_ATTEMPTS} attempts${auth.code != null ? ' (code ' + auth.code + ')' : ''}: ${auth.error || ''}. ` +
-        `Your payment is safe — your voucher is locked to this device. ` +
-        `Tap "Retry connection" or simply refresh and we will reconnect you automatically.`
-      );
-      showRetryButton(voucher, activeTransactionId);
+      setHint(`Authorization failed${auth.code != null ? ' (code ' + auth.code + ')' : ''}: ${auth.error || 'Please refresh and try again — your payment is safe.'}`);
       return;
     }
 
     // Verify internet actually works
     markStepsThrough('online');
     setOverlayCopy('Verifying internet', 'Checking that your device is really online…', '');
-    let online = await verifyInternet();
-    // Retry the probe a couple of times — captive portal exit can take a moment
-    for (let i = 0; !online && i < 3; i++) {
-      await new Promise(r => setTimeout(r, 1500));
-      online = await verifyInternet();
-    }
+    const online = await verifyInternet();
 
     if (!online) {
-      console.warn('Probe still failing after Omada auth OK — re-submitting voucher once more.');
-      // Re-submit the same voucher (still reserved to this MAC) one more time
-      const reauth = await omadaVoucherAuth(voucher);
-      if (reauth.ok) {
-        await new Promise(r => setTimeout(r, 1500));
-        online = await verifyInternet();
-      }
+      // Omada says OK but probe failed. Still consider connected — captive portal may block probes.
+      // We confirm anyway because Omada returned errorCode 0.
+      console.warn('Probe failed but Omada auth succeeded — proceeding.');
     }
 
     // Permanently consume the voucher on the backend
     if (activeTransactionId) {
-      call('portal-confirm-auth', { transactionId: activeTransactionId, clientMac, success: true }).catch(() => {});
+      call('portal-confirm-auth', { transactionId: activeTransactionId, clientMac }).catch(() => {});
     }
-    // Successful connection — clear the local crash-recovery marker
-    try { localStorage.removeItem('4ksmart_last_paid'); } catch (_) {}
 
     markStepsAllDone();
     setTimeout(() => {
       hideOverlay('payment-overlay');
       showConnected(connectedPackageLabel || selected.name, auth.result);
     }, 600);
-  }
-
-  // Manual retry — re-uses the SAME reserved voucher, never re-charges.
-  function showRetryButton(voucher, transactionId) {
-    const hint = $('hint');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn';
-    btn.style.marginTop = '10px';
-    btn.textContent = 'Retry connection (no new payment)';
-    btn.onclick = () => {
-      btn.remove();
-      setHint('');
-      showOverlay('payment-overlay');
-      onPaidIssueAndConnect(voucher, transactionId);
-    };
-    hint.appendChild(document.createElement('br'));
-    hint.appendChild(btn);
   }
 
   function showConnected(pkgLabel, redirectFromController) {
@@ -441,30 +380,7 @@
   // If this MAC has a recent paid (reserved or used) voucher in the last 24h,
   // immediately try to log it back in. Solves crashed-browser / weak-signal recovery.
   async function tryResumeForMac() {
-    // 1) Fast path: localStorage marker from a previous tab on this device
-    try {
-      const raw = localStorage.getItem('4ksmart_last_paid');
-      if (raw) {
-        const last = JSON.parse(raw);
-        // Only honour if within last 24h and the MAC matches (or no MAC in URL)
-        const fresh = last && (Date.now() - (last.ts || 0) < 24 * 3600 * 1000);
-        const macOk = !clientMac || !last.clientMac || last.clientMac === clientMac;
-        if (fresh && macOk && last.voucher) {
-          activeTransactionId = last.transactionId || null;
-          connectedPackageLabel = last.packageLabel || 'Internet Access';
-          setHint('Reconnecting your device — no new payment needed.', true);
-          showOverlay('payment-overlay');
-          setOverlayCopy('Reconnecting', 'A previous payment was found on this device. Logging you back in…', '');
-          STEPS.forEach(s => setStep(s, 'done'));
-          setStep('auth', 'active');
-          onPaidIssueAndConnect(last.voucher, last.transactionId);
-          return;
-        }
-      }
-    } catch (_) {}
-
     if (!clientMac) return;
-    // 2) Backend resume by MAC (works across devices/browsers)
     const { ok, data } = await call('portal-resume-session', { clientMac });
     if (!ok || !data?.found) return;
 
