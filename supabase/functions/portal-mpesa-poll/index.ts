@@ -60,8 +60,6 @@ Deno.serve(async (req) => {
 
     // Terminal failure states
     if (['failed','cancelled','insufficient_funds','timeout','invalid_pin','expired'].includes(mapped)) {
-      // Release any voucher that may have been reserved for this transaction
-      await supabase.rpc('release_voucher_for_transaction', { _transaction_id: tx.id });
       return new Response(JSON.stringify({
         status: mapped,
         error: tx.result_desc || 'Payment did not complete.',

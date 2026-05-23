@@ -15,22 +15,13 @@ const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
-    const { transactionId, clientMac, success } = await req.json();
+    const { transactionId, clientMac } = await req.json();
     if (!transactionId) {
       return new Response(JSON.stringify({ error: 'transactionId required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
-    // If the device reports it could NOT connect, release the voucher back to the pool
-    if (success === false) {
-      const { data: released } = await supabase.rpc('release_voucher_for_transaction', {
-        _transaction_id: transactionId,
-      });
-      return new Response(JSON.stringify({ ok: true, released: !!released }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
     const { data, error } = await supabase.rpc('confirm_voucher_used', {
       _transaction_id: transactionId,
       _client_mac: clientMac || null,
