@@ -249,7 +249,16 @@
     };
     saveOwned(ownedVoucher);
 
-    // Submit voucher straight to Omada
+    // Auto-fill the visible voucher input so the user can SEE the code being submitted,
+    // then submit it through the normal redeem path (same as manual entry).
+    const input = $('voucher-input');
+    if (input) {
+      input.value = voucher;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    setOverlayCopy('Payment received', `Auto-submitting voucher <strong>${voucher}</strong>…`, 'Please keep this page open.');
+
+    // Submit voucher straight to Omada (same call the Redeem button uses)
     const auth = await omadaVoucherAuth(voucher);
     if (!auth.ok) {
       // CRITICAL: do NOT hide the voucher. Show the manual recovery overlay.
