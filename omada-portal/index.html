@@ -103,20 +103,9 @@
       <div class="pulse-ring">
         <div class="pulse-dot"></div>
       </div>
-      <h2 id="pay-title">Confirm on your phone</h2>
-      <p id="pay-sub">An M-Pesa prompt has been sent to <strong id="pay-phone"></strong>.</p>
-      <p class="muted" id="pay-muted">Enter your M-Pesa PIN to authorize the payment.</p>
-
-      <!-- Live state timeline -->
-      <ul id="state-timeline" class="timeline">
-        <li data-step="stk"      class="pending"><span class="bullet"></span><span class="label">Sending STK Push</span></li>
-        <li data-step="prompt"   class="pending"><span class="bullet"></span><span class="label">Waiting for M-Pesa PIN</span></li>
-        <li data-step="paid"     class="pending"><span class="bullet"></span><span class="label">Payment confirmed</span></li>
-        <li data-step="reserve"  class="pending"><span class="bullet"></span><span class="label">Reserving voucher</span></li>
-        <li data-step="auth"     class="pending"><span class="bullet"></span><span class="label">Connecting to WiFi</span></li>
-        <li data-step="online"   class="pending"><span class="bullet"></span><span class="label">Verifying internet</span></li>
-      </ul>
-
+      <h2>Confirm on your phone</h2>
+      <p>An M-Pesa prompt has been sent to <strong id="pay-phone"></strong>.</p>
+      <p class="muted">Enter your M-Pesa PIN to authorize the payment.</p>
       <div class="timer-wrap">
         <div class="timer-bar"><div id="timer-bar-fill"></div></div>
         <div class="timer-text">Waiting <span id="timer">90</span>s</div>
@@ -146,32 +135,6 @@
         <div class="timer-text">Redirecting in <span id="connected-timer">5</span>s</div>
       </div>
       <button id="go-now" type="button" class="ghost">Go now</button>
-    </div>
-  </div>
-
-  <!-- Manual recovery overlay: auto-login failed but voucher IS reserved for this device.
-       Never hide the voucher from the user — show it, let them copy or reconnect. -->
-  <div id="recovery-overlay" class="overlay" aria-hidden="true">
-    <div class="overlay-card">
-      <div class="warn-circle">!</div>
-      <h2 id="recovery-title">Payment Received</h2>
-      <p id="recovery-sub">Your voucher has been reserved for this device.</p>
-      <p class="muted" id="recovery-muted">Auto-connect failed. Use the code below to reconnect manually.</p>
-
-      <div class="voucher-display">
-        <div class="voucher-display-label">Your Voucher Code</div>
-        <div class="voucher-display-code" id="recovery-code">—</div>
-        <div class="voucher-display-meta">
-          Package: <strong id="recovery-package">—</strong> &nbsp;·&nbsp;
-          Valid for <strong id="recovery-hours">—</strong> hours
-        </div>
-      </div>
-
-      <div class="recovery-actions">
-        <button id="recovery-reconnect" type="button" class="primary">Reconnect Automatically</button>
-        <button id="recovery-copy" type="button" class="ghost">Copy Code</button>
-      </div>
-      <p class="muted" style="margin-top:10px">If reconnect keeps failing, paste this code in the voucher box and tap Redeem.</p>
     </div>
   </div>
 

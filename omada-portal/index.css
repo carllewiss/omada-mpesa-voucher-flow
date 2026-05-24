@@ -168,38 +168,6 @@ body{
 .timer-text{font-size:13px;color:#6b7280}
 .timer-text span{font-weight:700;color:#16a34a}
 
-/* Live state timeline shown inside the payment overlay */
-.timeline{
-  list-style:none;margin:14px 0 6px;padding:0;text-align:left;
-  display:flex;flex-direction:column;gap:6px;
-}
-.timeline li{
-  display:flex;align-items:center;gap:10px;font-size:13px;
-  padding:6px 8px;border-radius:8px;background:#f9fafb;color:#6b7280;
-  transition:all .2s ease;
-}
-.timeline li .bullet{
-  width:14px;height:14px;border-radius:50%;border:2px solid #d1d5db;
-  background:#fff;flex:0 0 14px;position:relative;
-}
-.timeline li.done{background:#f0fdf4;color:#15803d}
-.timeline li.done .bullet{background:#16a34a;border-color:#16a34a}
-.timeline li.done .bullet::after{
-  content:"";position:absolute;left:3px;top:0;width:4px;height:8px;
-  border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);
-}
-.timeline li.active{background:#eff6ff;color:#1d4ed8;font-weight:600}
-.timeline li.active .bullet{
-  border-color:#2563eb;background:#fff;
-  animation:bulletPulse 1.2s ease-in-out infinite;
-}
-@keyframes bulletPulse{
-  0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.5)}
-  50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}
-}
-.timeline li.error{background:#fef2f2;color:#b91c1c}
-.timeline li.error .bullet{background:#dc2626;border-color:#dc2626}
-
 .ghost{
   background:transparent;border:1px solid #e5e7eb;color:#6b7280;
   padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;
@@ -212,46 +180,6 @@ body{
   display:flex;align-items:center;justify-content:center;
   color:#fff;font-size:38px;font-weight:700;margin:0 auto 14px;
   animation:popIn .35s cubic-bezier(.2,1.4,.4,1);
-}
-
-.warn-circle{
-  width:64px;height:64px;border-radius:50%;
-  background:linear-gradient(135deg,#f59e0b,#d97706);
-  display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:34px;font-weight:800;margin:0 auto 12px;
-  box-shadow:0 6px 18px -4px rgba(217,119,6,.5);
-  animation:popIn .35s cubic-bezier(.2,1.4,.4,1);
-}
-
-.voucher-display{
-  margin:16px 0 8px;padding:16px;border-radius:14px;
-  background:linear-gradient(135deg,#faf5ff,#eff6ff);
-  border:2px dashed #a855f7;
-}
-.voucher-display-label{
-  font-size:11px;font-weight:700;letter-spacing:.08em;color:#7c3aed;text-transform:uppercase;margin-bottom:6px;
-}
-.voucher-display-code{
-  font-family:'SF Mono',Menlo,Consolas,monospace;
-  font-size:26px;font-weight:800;letter-spacing:.12em;color:#1f2937;
-  word-break:break-all;padding:6px 0;
-}
-.voucher-display-meta{font-size:12px;color:#6b7280;margin-top:4px}
-.recovery-actions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
-.recovery-actions .primary{margin-top:0}
-
-/* Banner shown above the card when an unconsumed paid voucher is found on load */
-.session-banner{
-  background:linear-gradient(135deg,#ecfdf5,#eff6ff);
-  border:1px solid #bbf7d0;border-radius:14px;
-  padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;
-}
-.session-banner .sb-dot{width:10px;height:10px;border-radius:50%;background:#16a34a;box-shadow:0 0 0 4px rgba(22,163,74,.18);flex:0 0 10px}
-.session-banner .sb-text{flex:1;font-size:13px;color:#15803d;line-height:1.35}
-.session-banner .sb-text strong{color:#065f46}
-.session-banner button{
-  border:none;cursor:pointer;background:#16a34a;color:#fff;
-  padding:8px 12px;border-radius:8px;font-weight:600;font-size:13px;
 }
 
 @media (max-width:380px){

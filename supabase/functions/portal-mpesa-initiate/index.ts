@@ -106,20 +106,15 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Persist transaction tied to sessionId + client MAC.
-    // MAC is the IDENTITY for authentication — phone is just the payment instrument.
-    const { data: txRow } = await supabase.from('transactions').insert({
+    // Persist transaction tied to sessionId, with the SERVER-DECIDED amount/package
+    await supabase.from('transactions').insert({
       phone_number: formattedPhone,
       amount,
       package_type: packageType,
       checkout_request_id: stk.CheckoutRequestID,
       merchant_request_id: stk.MerchantRequestID,
       status: 'pending',
-      session_id: sessionId,
-      client_mac: clientMac || null,
-      ap_mac: apMac || null,
-      ssid: ssid || null,
-    }).select('id').single();
+    });
 
     // Pending authorization row — voucher will be claimed on poll once paid
     await supabase.from('client_authorizations').insert({
@@ -138,7 +133,6 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       checkoutRequestId: stk.CheckoutRequestID,
-      transactionId: txRow?.id,
       sessionId,
       amount,
       package: pkg.display_name,
