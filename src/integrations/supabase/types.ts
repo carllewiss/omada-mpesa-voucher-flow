@@ -221,6 +221,10 @@ export type Database = {
         Returns: boolean
       }
       release_expired_reservations: { Args: never; Returns: number }
+      release_voucher_for_transaction: {
+        Args: { _transaction_id: string }
+        Returns: boolean
+      }
       reserve_voucher_for_transaction: {
         Args: {
           _client_mac: string
