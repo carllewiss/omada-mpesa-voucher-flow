@@ -49,6 +49,23 @@
   let selected = PACKAGES[0];
   let connectedPackageLabel = '';
   let activeTransactionId = null;
+  // Session-bound voucher ownership (kept across reloads via localStorage).
+  // Shape: { code, packageType, durationHours, transactionId, expiresAt }
+  const OWNED_KEY = '4ksmart_owned_voucher';
+  function loadOwned() {
+    try { return JSON.parse(localStorage.getItem(OWNED_KEY) || 'null'); } catch { return null; }
+  }
+  function saveOwned(v) {
+    try { localStorage.setItem(OWNED_KEY, JSON.stringify(v)); } catch {}
+  }
+  function clearOwned() {
+    try { localStorage.removeItem(OWNED_KEY); } catch {}
+  }
+  function ownedValid(v) {
+    return v && v.code && v.expiresAt && new Date(v.expiresAt).getTime() > Date.now();
+  }
+  let ownedVoucher = loadOwned();
+  if (ownedVoucher && !ownedValid(ownedVoucher)) { clearOwned(); ownedVoucher = null; }
 
   const $ = (id) => document.getElementById(id);
   const setHint = (msg, ok) => {
@@ -221,12 +238,29 @@
     markStepsThrough('auth');
     setOverlayCopy('Payment received', 'Voucher issued. Connecting you to WiFi…', 'Please keep this page open.');
 
+    // Persist ownership IMMEDIATELY so a crash / reload still finds the voucher.
+    const hours = (PACKAGES.find(p => p.name === connectedPackageLabel) || selected).id === '24hour' ? 24 : 2;
+    ownedVoucher = {
+      code: voucher,
+      packageType: selected.id,
+      durationHours: hours,
+      transactionId: activeTransactionId,
+      expiresAt: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
+    };
+    saveOwned(ownedVoucher);
+
     // Submit voucher straight to Omada
     const auth = await omadaVoucherAuth(voucher);
     if (!auth.ok) {
+      // CRITICAL: do NOT hide the voucher. Show the manual recovery overlay.
       markStepsErrorAt('auth');
       stopPaymentFlow();
-      setHint(`Authorization failed${auth.code != null ? ' (code ' + auth.code + ')' : ''}: ${auth.error || 'Please refresh and try again — your payment is safe.'}`);
+      showRecoveryOverlay({
+        code: voucher,
+        packageType: selected.id,
+        durationHours: hours,
+        reason: auth.error || `Authorization failed${auth.code != null ? ' (code ' + auth.code + ')' : ''}.`,
+      });
       return;
     }
 
@@ -276,6 +310,80 @@
       if (connectedInterval) { clearInterval(connectedInterval); connectedInterval = null; }
       window.location.href = target;
     };
+  }
+
+  // ---------- Manual recovery overlay ----------
+  function showRecoveryOverlay({ code, packageType, durationHours, reason, resumed }) {
+    $('recovery-code').textContent = code;
+    $('recovery-package').textContent = packageLabelFor(packageType);
+    $('recovery-hours').textContent = String(durationHours || (packageType === '24hour' ? 24 : 2));
+    $('recovery-title').textContent = resumed ? 'Welcome back' : 'Payment Received';
+    $('recovery-sub').textContent = resumed
+      ? 'A recent payment was found for this device.'
+      : 'Your voucher has been reserved for this device.';
+    $('recovery-muted').textContent = reason
+      ? `${reason} You can reconnect using the code below.`
+      : 'Tap reconnect, or paste the code into the voucher box.';
+    showOverlay('recovery-overlay');
+
+    $('recovery-reconnect').onclick = async () => {
+      $('recovery-reconnect').disabled = true;
+      $('recovery-reconnect').textContent = 'Reconnecting…';
+      const r = await omadaVoucherAuth(code);
+      $('recovery-reconnect').disabled = false;
+      $('recovery-reconnect').textContent = 'Reconnect Automatically';
+      if (r.ok) {
+        if (activeTransactionId) {
+          call('portal-confirm-auth', { transactionId: activeTransactionId, clientMac }).catch(() => {});
+        }
+        hideOverlay('recovery-overlay');
+        showConnected(packageLabelFor(packageType), r.result);
+      } else {
+        setHint(r.error || `Reconnect failed${r.code != null ? ' (code ' + r.code + ')' : ''}. Try the code manually.`);
+      }
+    };
+
+    $('recovery-copy').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(code);
+        $('recovery-copy').textContent = 'Copied ✓';
+        setTimeout(() => { $('recovery-copy').textContent = 'Copy Code'; }, 1500);
+      } catch {
+        $('voucher-input').value = code;
+        $('recovery-copy').textContent = 'Pasted in voucher box ✓';
+      }
+    };
+  }
+
+  // ---------- Session banner: voucher already owned (paid earlier) ----------
+  function renderOwnedBanner() {
+    if (!ownedVoucher) return;
+    const exists = document.getElementById('session-banner');
+    if (exists) exists.remove();
+    const banner = document.createElement('div');
+    banner.id = 'session-banner';
+    banner.className = 'session-banner';
+    const mins = Math.max(1, Math.round((new Date(ownedVoucher.expiresAt).getTime() - Date.now()) / 60000));
+    banner.innerHTML = `
+      <div class="sb-dot"></div>
+      <div class="sb-text">
+        <strong>Payment already received.</strong> Voucher <code>${ownedVoucher.code}</code>
+        is reserved for this device (~${mins} min left).
+      </div>
+      <button type="button" id="sb-reconnect">Reconnect</button>`;
+    const wrap = document.querySelector('.wrap');
+    wrap.insertBefore(banner, wrap.firstChild);
+    document.getElementById('sb-reconnect').onclick = () => {
+      showRecoveryOverlay({
+        code: ownedVoucher.code,
+        packageType: ownedVoucher.packageType,
+        durationHours: ownedVoucher.durationHours,
+        resumed: true,
+      });
+    };
+    // Prevent accidental re-payment while a valid voucher is owned
+    $('pay-btn').disabled = true;
+    $('pay-btn-text').textContent = 'Voucher already active — tap Reconnect above';
   }
 
   // ---------- Voucher (DIRECT to Omada — no backend call) ----------
@@ -331,7 +439,7 @@
 
   $('cancel-pay').addEventListener('click', () => {
     stopPaymentFlow();
-    setHint('Payment cancelled. You can try again — if money was deducted, refresh and we will reconnect you automatically.');
+    setHint('Payment cancelled. If money was deducted, refresh — your voucher will be waiting for this device.');
   });
 
   // Human-readable error per state
@@ -380,19 +488,60 @@
   // If this MAC has a recent paid (reserved or used) voucher in the last 24h,
   // immediately try to log it back in. Solves crashed-browser / weak-signal recovery.
   async function tryResumeForMac() {
+    // 1) Local ownership wins fastest (survives full page reload, no network needed)
+    if (ownedVoucher) {
+      renderOwnedBanner();
+      // Try silent auto-reconnect once
+      const r = await omadaVoucherAuth(ownedVoucher.code);
+      if (r.ok) {
+        if (ownedVoucher.transactionId) {
+          call('portal-confirm-auth', { transactionId: ownedVoucher.transactionId, clientMac }).catch(() => {});
+        }
+        showConnected(packageLabelFor(ownedVoucher.packageType), r.result);
+        return;
+      }
+      // Auto-failed → expose the voucher to the user
+      showRecoveryOverlay({
+        code: ownedVoucher.code,
+        packageType: ownedVoucher.packageType,
+        durationHours: ownedVoucher.durationHours,
+        resumed: true,
+        reason: r.error || `Auto-connect failed${r.code != null ? ' (code ' + r.code + ')' : ''}.`,
+      });
+      return;
+    }
+
+    // 2) Fall back to server-side MAC lookup (handles same device, fresh storage)
     if (!clientMac) return;
     const { ok, data } = await call('portal-resume-session', { clientMac });
     if (!ok || !data?.found) return;
 
     activeTransactionId = data.transactionId;
     connectedPackageLabel = packageLabelFor(data.packageType);
-    setHint('We found a recent payment for this device. Reconnecting…', true);
+    // Persist locally so subsequent reloads are instant
+    ownedVoucher = {
+      code: data.voucher,
+      packageType: data.packageType,
+      durationHours: data.durationHours || (data.packageType === '24hour' ? 24 : 2),
+      transactionId: data.transactionId,
+      expiresAt: new Date(Date.now() + (data.durationHours || 2) * 3600 * 1000).toISOString(),
+    };
+    saveOwned(ownedVoucher);
+    renderOwnedBanner();
 
-    showOverlay('payment-overlay');
-    setOverlayCopy('Reconnecting', 'A previous payment was found for this device. Logging you back in…', '');
-    STEPS.forEach(s => setStep(s, 'done'));
-    setStep('auth', 'active');
-    onPaidIssueAndConnect(data.voucher, data.transactionId);
+    const r = await omadaVoucherAuth(data.voucher);
+    if (r.ok) {
+      call('portal-confirm-auth', { transactionId: data.transactionId, clientMac }).catch(() => {});
+      showConnected(connectedPackageLabel, r.result);
+    } else {
+      showRecoveryOverlay({
+        code: data.voucher,
+        packageType: data.packageType,
+        durationHours: ownedVoucher.durationHours,
+        resumed: true,
+        reason: r.error || `Auto-connect failed${r.code != null ? ' (code ' + r.code + ')' : ''}.`,
+      });
+    }
   }
 
   function packageLabelFor(id) {

@@ -149,6 +149,32 @@
     </div>
   </div>
 
+  <!-- Manual recovery overlay: auto-login failed but voucher IS reserved for this device.
+       Never hide the voucher from the user — show it, let them copy or reconnect. -->
+  <div id="recovery-overlay" class="overlay" aria-hidden="true">
+    <div class="overlay-card">
+      <div class="warn-circle">!</div>
+      <h2 id="recovery-title">Payment Received</h2>
+      <p id="recovery-sub">Your voucher has been reserved for this device.</p>
+      <p class="muted" id="recovery-muted">Auto-connect failed. Use the code below to reconnect manually.</p>
+
+      <div class="voucher-display">
+        <div class="voucher-display-label">Your Voucher Code</div>
+        <div class="voucher-display-code" id="recovery-code">—</div>
+        <div class="voucher-display-meta">
+          Package: <strong id="recovery-package">—</strong> &nbsp;·&nbsp;
+          Valid for <strong id="recovery-hours">—</strong> hours
+        </div>
+      </div>
+
+      <div class="recovery-actions">
+        <button id="recovery-reconnect" type="button" class="primary">Reconnect Automatically</button>
+        <button id="recovery-copy" type="button" class="ghost">Copy Code</button>
+      </div>
+      <p class="muted" style="margin-top:10px">If reconnect keeps failing, paste this code in the voucher box and tap Redeem.</p>
+    </div>
+  </div>
+
   <script src="index.js"></script>
 </body>
 </html>
