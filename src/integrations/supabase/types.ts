@@ -95,42 +95,63 @@ export type Database = {
       transactions: {
         Row: {
           amount: number
+          ap_mac: string | null
+          authenticated_at: string | null
           checkout_request_id: string | null
+          client_mac: string | null
           created_at: string
           id: string
           merchant_request_id: string | null
           mpesa_receipt: string | null
           package_type: string
           phone_number: string
+          result_code: number | null
           result_desc: string | null
+          session_id: string | null
+          ssid: string | null
           status: string
           updated_at: string
+          voucher_code: string | null
         }
         Insert: {
           amount: number
+          ap_mac?: string | null
+          authenticated_at?: string | null
           checkout_request_id?: string | null
+          client_mac?: string | null
           created_at?: string
           id?: string
           merchant_request_id?: string | null
           mpesa_receipt?: string | null
           package_type?: string
           phone_number: string
+          result_code?: number | null
           result_desc?: string | null
+          session_id?: string | null
+          ssid?: string | null
           status?: string
           updated_at?: string
+          voucher_code?: string | null
         }
         Update: {
           amount?: number
+          ap_mac?: string | null
+          authenticated_at?: string | null
           checkout_request_id?: string | null
+          client_mac?: string | null
           created_at?: string
           id?: string
           merchant_request_id?: string | null
           mpesa_receipt?: string | null
           package_type?: string
           phone_number?: string
+          result_code?: number | null
           result_desc?: string | null
+          session_id?: string | null
+          ssid?: string | null
           status?: string
           updated_at?: string
+          voucher_code?: string | null
         }
         Relationships: []
       }
@@ -142,7 +163,11 @@ export type Database = {
           id: string
           is_used: boolean
           package_type: string
+          reserved_for_mac: string | null
+          reserved_for_session: string | null
+          reserved_until: string | null
           status: string
+          transaction_id: string | null
           used_at: string | null
           used_by_mac: string | null
         }
@@ -153,7 +178,11 @@ export type Database = {
           id?: string
           is_used?: boolean
           package_type?: string
+          reserved_for_mac?: string | null
+          reserved_for_session?: string | null
+          reserved_until?: string | null
           status?: string
+          transaction_id?: string | null
           used_at?: string | null
           used_by_mac?: string | null
         }
@@ -164,7 +193,11 @@ export type Database = {
           id?: string
           is_used?: boolean
           package_type?: string
+          reserved_for_mac?: string | null
+          reserved_for_session?: string | null
+          reserved_until?: string | null
           status?: string
+          transaction_id?: string | null
           used_at?: string | null
           used_by_mac?: string | null
         }
@@ -181,6 +214,41 @@ export type Database = {
           code: string
           duration_hours: number
           package_type: string
+        }[]
+      }
+      confirm_voucher_used: {
+        Args: { _client_mac: string; _transaction_id: string }
+        Returns: boolean
+      }
+      release_expired_reservations: { Args: never; Returns: number }
+      release_voucher_for_transaction: {
+        Args: { _transaction_id: string }
+        Returns: boolean
+      }
+      reserve_voucher_for_transaction: {
+        Args: {
+          _client_mac: string
+          _hold_minutes?: number
+          _package_type: string
+          _session_id: string
+          _transaction_id: string
+        }
+        Returns: {
+          code: string
+          duration_hours: number
+          package_type: string
+          status: string
+        }[]
+      }
+      resume_session_for_mac: {
+        Args: { _client_mac: string }
+        Returns: {
+          authenticated: boolean
+          duration_hours: number
+          package_type: string
+          paid_at: string
+          transaction_id: string
+          voucher_code: string
         }[]
       }
     }
