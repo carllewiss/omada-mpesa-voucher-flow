@@ -8,6 +8,3 @@ verify_jwt = false
 
 [functions.portal-redeem-voucher]
 verify_jwt = false
-
-[functions.mpesa-stk-query]
-verify_jwt = false

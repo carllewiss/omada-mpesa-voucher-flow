@@ -234,17 +234,8 @@
 
   function pollPayment(checkoutRequestId) {
     let attempts = 0;
-    let stkQueryFired = false;
     pollInterval = setInterval(async () => {
       attempts += 1;
-      // Fail-safe: at ~58s (attempt 23 × 2.5s), if the M-Pesa async callback
-      // hasn't arrived yet, ask Safaricom directly via STK Push Query.
-      // The edge function updates the transaction row, so the next poll tick
-      // picks up the result through the normal path.
-      if (!stkQueryFired && attempts === 23) {
-        stkQueryFired = true;
-        call('mpesa-stk-query', { checkoutRequestId }).catch(() => {});
-      }
       const { ok, data } = await call('portal-mpesa-poll', { checkoutRequestId, clientMac });
       if (!ok) return;
       if (data.status === 'success') {
