@@ -1,0 +1,1 @@
+ALTER DATABASE postgres SET timezone TO 'Africa/Nairobi';

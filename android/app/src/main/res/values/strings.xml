@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">4K SMART Admin</string>
+    <string name="title_activity_main">4K SMART Admin</string>
+    <string name="package_name">app.lovable.cae1b3003e54411b8fb315a49ade0906</string>
+    <string name="custom_url_scheme">app.lovable.cae1b3003e54411b8fb315a49ade0906</string>
+</resources>
