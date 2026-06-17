@@ -217,6 +217,19 @@
     });
 
     if (!ok || !data.success) {
+      // LAYER 4 — already has an active package within last 24h
+      if (data && data.alreadyActive && data.voucher) {
+        $('pay-btn').disabled = false;
+        connectedPackageLabel = data.packageType === '24hour' ? '24-Hour Package' : '2-Hour Package';
+        setHint(data.message || 'You already have an active package. Reconnecting…', true);
+        const r = await omadaVoucherAuth(data.voucher);
+        if (r.ok) {
+          showConnected(connectedPackageLabel, r.result);
+        } else {
+          setHint('Active package found but reconnect failed. Please contact support.');
+        }
+        return;
+      }
       $('pay-btn').disabled = false;
       setHint(data.error || 'Failed to start payment. Please try again.');
       return;
@@ -268,6 +281,20 @@
 
   $('cMac').value = clientMac; $('aMac').value = apMac; $('gMac').value = gatewayMac;
   $('sName').value = ssidName; $('rId').value = radioId; $('vId').value = vid; $('oUrl').value = originUrl;
+
+  // LAYER 1 — Silent auto-resume: if this MAC already paid in the last 24h
+  // and the package window is still open, re-submit the voucher to Omada
+  // without bothering the customer.
+  (async () => {
+    if (!clientMac) return;
+    try {
+      const { ok, data } = await call('portal-resume-session', { clientMac });
+      if (!ok || !data || !data.active || !data.voucher) return;
+      connectedPackageLabel = data.packageType === '24hour' ? '24-Hour Package' : '2-Hour Package';
+      const r = await omadaVoucherAuth(data.voucher);
+      if (r.ok) showConnected(connectedPackageLabel, r.result);
+    } catch (_) { /* silent */ }
+  })();
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) document.title = '⏳ Confirm M-Pesa…';
