@@ -23,45 +23,19 @@ function normalizePhone(p: string): string {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
-    const { clientMac, phoneNumber } = await req.json().catch(() => ({}));
-    if (!clientMac && !phoneNumber) {
+    // Resume is strictly per-device (MAC). One phone number can pay for
+    // multiple devices, so phone-based resume would re-attach the wrong
+    // device's voucher. Always require clientMac.
+    const { clientMac } = await req.json().catch(() => ({}));
+    if (!clientMac) {
       return new Response(JSON.stringify({ active: false }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
-    let row: any = null;
-
-    if (clientMac) {
-      const { data } = await supabase.rpc('resume_session_for_mac', { _client_mac: clientMac });
-      if (Array.isArray(data) && data.length) row = data[0];
-    }
-
-    if (!row && phoneNumber) {
-      const phone = normalizePhone(phoneNumber);
-      const { data } = await supabase
-        .from('transactions')
-        .select('id, package_type, voucher_code, updated_at, vouchers!inner(code, package_type, duration_hours, used_at, status)')
-        .eq('phone_number', phone)
-        .in('status', ['success', 'paid'])
-        .gt('updated_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-        .order('updated_at', { ascending: false })
-        .limit(1);
-      if (data && data.length) {
-        const t: any = data[0];
-        const v = Array.isArray(t.vouchers) ? t.vouchers[0] : t.vouchers;
-        if (v && ['reserved', 'used'].includes(v.status)) {
-          row = {
-            transaction_id: t.id,
-            voucher_code: v.code,
-            package_type: v.package_type,
-            duration_hours: v.duration_hours,
-            paid_at: t.updated_at,
-          };
-        }
-      }
-    }
+    const { data } = await supabase.rpc('resume_session_for_mac', { _client_mac: clientMac });
+    const row: any = Array.isArray(data) && data.length ? data[0] : null;
 
     if (!row) {
       return new Response(JSON.stringify({ active: false }), {
@@ -69,6 +43,8 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Honor the ACTUAL package duration (2h vs 24h), not a flat 24h window.
+    // The RPC pre-filters last 24h for speed; we then enforce per-package expiry.
     const paidAt = new Date(row.paid_at).getTime();
     const expiresAt = paidAt + (row.duration_hours || 2) * 60 * 60 * 1000;
     if (expiresAt < Date.now()) {
