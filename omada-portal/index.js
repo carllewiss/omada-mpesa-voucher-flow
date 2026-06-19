@@ -30,6 +30,8 @@
   let selected = PACKAGES[0];
   // Tracks the package label used for the connected screen (set when M-Pesa succeeds OR voucher redeems)
   let connectedPackageLabel = '';
+  // Tracks the active M-Pesa checkout so we can swap a rejected voucher for a fresh one
+  let activeCheckoutRequestId = '';
 
   const $ = (id) => document.getElementById(id);
   const setHint = (msg, ok) => {
@@ -141,19 +143,51 @@
     $('pay-btn').disabled = false;
   }
 
-  function showSuccessThenAuth(code) {
+  // M-Pesa flow: try the issued voucher; if Omada rejects it, burn it server-side
+  // and request a fresh voucher (never one this MAC has already received). Retry
+  // up to MAX_SWAPS times before giving up.
+  async function showSuccessThenAuth(code) {
+    const MAX_SWAPS = 2;
     $('success-code').textContent = code;
     hideOverlay('payment-overlay');
     showOverlay('success-overlay');
-    setTimeout(async () => {
-      const r = await omadaVoucherAuth(code);
-      hideOverlay('success-overlay');
+
+    let currentCode = code;
+    let attempt = 0;
+    await new Promise((res) => setTimeout(res, 900));
+
+    while (true) {
+      const r = await omadaVoucherAuth(currentCode);
       if (r.ok) {
+        hideOverlay('success-overlay');
         showConnected(connectedPackageLabel || selected.name, r.result);
-      } else {
-        setHint(`Authorization failed${r.code != null ? ' (code ' + r.code + ')' : ''}: ${r.error || 'Please try again.'}`);
+        return;
       }
-    }, 900);
+
+      if (attempt >= MAX_SWAPS || !activeCheckoutRequestId) {
+        hideOverlay('success-overlay');
+        setHint(`Authorization failed${r.code != null ? ' (code ' + r.code + ')' : ''}: ${r.error || 'Please contact support — your payment is safe.'}`);
+        return;
+      }
+
+      attempt += 1;
+      setHint(`Voucher rejected by controller — trying a fresh one (attempt ${attempt}/${MAX_SWAPS})…`, true);
+
+      const { ok, data } = await call('portal-swap-voucher', {
+        checkoutRequestId: activeCheckoutRequestId,
+        clientMac,
+        rejectedCode: currentCode,
+      });
+
+      if (!ok || data.status !== 'success' || !data.voucher) {
+        hideOverlay('success-overlay');
+        setHint(data && data.error ? data.error : 'No alternative voucher available. Please contact support — your payment is safe.');
+        return;
+      }
+
+      currentCode = data.voucher;
+      $('success-code').textContent = currentCode;
+    }
   }
 
   function showConnected(pkgLabel, redirectFromController) {
@@ -236,6 +270,7 @@
     }
 
     connectedPackageLabel = selected.name;
+    activeCheckoutRequestId = data.checkoutRequestId;
     startPaymentOverlay(phone, 90);
     pollPayment(data.checkoutRequestId);
   });
