@@ -143,9 +143,10 @@
     $('pay-btn').disabled = false;
   }
 
-  // M-Pesa flow: try the issued voucher; if Omada rejects it, burn it server-side
-  // and request a fresh voucher (never one this MAC has already received). Retry
-  // up to MAX_SWAPS times before giving up.
+  // M-Pesa flow: try the issued voucher; if Omada rejects it, silently burn it
+  // server-side and request a fresh voucher (never one this MAC has already
+  // received). All swaps happen behind the existing success animation — the
+  // customer never sees retry chatter.
   async function showSuccessThenAuth(code) {
     const MAX_SWAPS = 2;
     $('success-code').textContent = code;
@@ -166,12 +167,11 @@
 
       if (attempt >= MAX_SWAPS || !activeCheckoutRequestId) {
         hideOverlay('success-overlay');
-        setHint(`Authorization failed${r.code != null ? ' (code ' + r.code + ')' : ''}: ${r.error || 'Please contact support — your payment is safe.'}`);
+        setHint('Could not connect you automatically. Please contact support — your payment is safe.');
         return;
       }
 
       attempt += 1;
-      setHint(`Voucher rejected by controller — trying a fresh one (attempt ${attempt}/${MAX_SWAPS})…`, true);
 
       const { ok, data } = await call('portal-swap-voucher', {
         checkoutRequestId: activeCheckoutRequestId,
@@ -181,7 +181,7 @@
 
       if (!ok || data.status !== 'success' || !data.voucher) {
         hideOverlay('success-overlay');
-        setHint(data && data.error ? data.error : 'No alternative voucher available. Please contact support — your payment is safe.');
+        setHint('Could not connect you automatically. Please contact support — your payment is safe.');
         return;
       }
 
