@@ -251,6 +251,18 @@ export type Database = {
           voucher_code: string
         }[]
       }
+      swap_voucher_for_mpesa: {
+        Args: {
+          _checkout_request_id: string
+          _client_mac: string
+          _rejected_code: string
+        }
+        Returns: {
+          code: string
+          duration_hours: number
+          package_type: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
