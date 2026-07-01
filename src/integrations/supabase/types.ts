@@ -155,6 +155,42 @@ export type Database = {
         }
         Relationships: []
       }
+      voucher_swaps: {
+        Row: {
+          checkout_request_id: string | null
+          client_mac: string | null
+          created_at: string
+          id: string
+          new_code: string | null
+          package_type: string | null
+          reason: string | null
+          rejected_code: string
+          status: string
+        }
+        Insert: {
+          checkout_request_id?: string | null
+          client_mac?: string | null
+          created_at?: string
+          id?: string
+          new_code?: string | null
+          package_type?: string | null
+          reason?: string | null
+          rejected_code: string
+          status: string
+        }
+        Update: {
+          checkout_request_id?: string | null
+          client_mac?: string | null
+          created_at?: string
+          id?: string
+          new_code?: string | null
+          package_type?: string | null
+          reason?: string | null
+          rejected_code?: string
+          status?: string
+        }
+        Relationships: []
+      }
       vouchers: {
         Row: {
           code: string
