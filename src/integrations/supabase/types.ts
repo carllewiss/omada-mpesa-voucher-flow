@@ -202,6 +202,9 @@ export type Database = {
           reserved_for_mac: string | null
           reserved_for_session: string | null
           reserved_until: string | null
+          resume_token_hash: string | null
+          resume_token_mac_count: number
+          resume_token_macs: string[]
           status: string
           transaction_id: string | null
           used_at: string | null
@@ -217,6 +220,9 @@ export type Database = {
           reserved_for_mac?: string | null
           reserved_for_session?: string | null
           reserved_until?: string | null
+          resume_token_hash?: string | null
+          resume_token_mac_count?: number
+          resume_token_macs?: string[]
           status?: string
           transaction_id?: string | null
           used_at?: string | null
@@ -232,6 +238,9 @@ export type Database = {
           reserved_for_mac?: string | null
           reserved_for_session?: string | null
           reserved_until?: string | null
+          resume_token_hash?: string | null
+          resume_token_mac_count?: number
+          resume_token_macs?: string[]
           status?: string
           transaction_id?: string | null
           used_at?: string | null
@@ -274,6 +283,15 @@ export type Database = {
           duration_hours: number
           package_type: string
           status: string
+        }[]
+      }
+      resume_session_by_token: {
+        Args: { _client_mac: string; _token_hash: string }
+        Returns: {
+          duration_hours: number
+          package_type: string
+          paid_at: string
+          voucher_code: string
         }[]
       }
       resume_session_for_mac: {

@@ -3,6 +3,12 @@
 // If found, the portal silently re-submits it to Omada — no new payment needed.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
 
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -26,14 +32,46 @@ Deno.serve(async (req) => {
     // Resume is strictly per-device (MAC). One phone number can pay for
     // multiple devices, so phone-based resume would re-attach the wrong
     // device's voucher. Always require clientMac.
-    const { clientMac } = await req.json().catch(() => ({}));
-    if (!clientMac) {
+    const { clientMac, resumeToken } = await req.json().catch(() => ({}));
+    if (!clientMac && !resumeToken) {
       return new Response(JSON.stringify({ active: false }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+
+    // LAYER 2 — Silent token resume (handles MAC randomization). Package-duration bound.
+    if (resumeToken && typeof resumeToken === 'string' && resumeToken.length >= 20) {
+      const hash = await sha256Hex(resumeToken);
+      const { data: t } = await supabase.rpc('resume_session_by_token', {
+        _token_hash: hash,
+        _client_mac: clientMac || null,
+      });
+      const trow: any = Array.isArray(t) && t.length ? t[0] : null;
+      if (trow) {
+        const paidAt = new Date(trow.paid_at).getTime();
+        const expiresAt = paidAt + (trow.duration_hours || 2) * 60 * 60 * 1000;
+        if (expiresAt > Date.now()) {
+          return new Response(JSON.stringify({
+            active: true,
+            voucher: trow.voucher_code,
+            packageType: trow.package_type,
+            durationHours: trow.duration_hours,
+            paidAt: trow.paid_at,
+            expiresAt: new Date(expiresAt).toISOString(),
+            source: 'token',
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+      }
+    }
+
+    if (!clientMac) {
+      return new Response(JSON.stringify({ active: false }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { data } = await supabase.rpc('resume_session_for_mac', { _client_mac: clientMac });
     const row: any = Array.isArray(data) && data.length ? data[0] : null;
 
