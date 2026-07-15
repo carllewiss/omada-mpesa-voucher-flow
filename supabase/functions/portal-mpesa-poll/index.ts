@@ -10,6 +10,18 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+// Layer 2 helper — generate a random URL-safe token and its sha-256 hash.
+async function mintResumeToken(): Promise<{ token: string; hash: string }> {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const token = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  const hash = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0')).join('');
+  return { token, hash };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -57,10 +69,25 @@ Deno.serve(async (req) => {
 
       if (existingAuth?.mpesa_receipt && existingAuth.mpesa_receipt.startsWith('VC-')) {
         const code = existingAuth.mpesa_receipt.substring(3);
+        // Idempotent path: only mint a resume token if the voucher doesn't already have one.
+        let resumeToken: string | null = null;
+        const { data: vrow } = await supabase
+          .from('vouchers')
+          .select('id, resume_token_hash')
+          .eq('code', code)
+          .maybeSingle();
+        if (vrow && !vrow.resume_token_hash) {
+          const minted = await mintResumeToken();
+          await supabase.from('vouchers')
+            .update({ resume_token_hash: minted.hash })
+            .eq('id', vrow.id);
+          resumeToken = minted.token;
+        }
         return new Response(JSON.stringify({
           status: 'success', voucher: code,
           durationHours: existingAuth.duration_hours,
           packageType: existingAuth.package_type,
+          resumeToken,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
@@ -80,6 +107,12 @@ Deno.serve(async (req) => {
 
       const v = claimed[0];
 
+      // Layer 2 — mint silent resume token bound to this voucher row.
+      const minted = await mintResumeToken();
+      await supabase.from('vouchers')
+        .update({ resume_token_hash: minted.hash })
+        .eq('code', v.code);
+
       await supabase
         .from('client_authorizations')
         .update({
@@ -95,6 +128,7 @@ Deno.serve(async (req) => {
         voucher: v.code,
         durationHours: v.duration_hours,
         packageType: v.package_type,
+        resumeToken: minted.token,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

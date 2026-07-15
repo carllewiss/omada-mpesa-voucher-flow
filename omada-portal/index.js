@@ -23,6 +23,18 @@
   const sessionId = (crypto.randomUUID && crypto.randomUUID()) ||
     (Date.now() + '-' + Math.random().toString(36).slice(2));
 
+  // LAYER 2 — silent resume token storage (per SSID, per browser).
+  const RESUME_KEY = `4ksmart_resume_${ssidName || 'default'}`;
+  const getResumeToken = () => {
+    try { return localStorage.getItem(RESUME_KEY) || ''; } catch { return ''; }
+  };
+  const setResumeToken = (t) => {
+    try { if (t) localStorage.setItem(RESUME_KEY, t); } catch {}
+  };
+  const clearResumeToken = () => {
+    try { localStorage.removeItem(RESUME_KEY); } catch {}
+  };
+
   const PACKAGES = [
     { id: '2hour',  name: '2-Hour Package',  duration: '2 Hours',  price: 10 },
     { id: '24hour', name: '24-Hour Package', duration: '24 Hours', price: 30 },
@@ -298,9 +310,11 @@
       if (data.status === 'success') {
         clearInterval(pollInterval); pollInterval = null;
         if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+        if (data.resumeToken) setResumeToken(data.resumeToken);
         showSuccessThenAuth(data.voucher);
       } else if (data.status === 'failed') {
         stopPaymentFlow();
+        clearResumeToken();
         setHint(data.error || 'Payment failed. Please try again.');
       } else if (data.status === 'no_voucher') {
         stopPaymentFlow();
@@ -317,14 +331,20 @@
   $('cMac').value = clientMac; $('aMac').value = apMac; $('gMac').value = gatewayMac;
   $('sName').value = ssidName; $('rId').value = radioId; $('vId').value = vid; $('oUrl').value = originUrl;
 
-  // LAYER 1 — Silent auto-resume: if this MAC already paid in the last 24h
-  // and the package window is still open, re-submit the voucher to Omada
-  // without bothering the customer.
+  // LAYERS 1 + 2 — Silent auto-resume in the background.
+  //   Layer 2 (token) covers MAC randomization: same browser, new MAC.
+  //   Layer 1 (MAC) covers stable-MAC devices.
+  // Both are package-duration bound (2h / 24h) — token dies with the voucher.
   (async () => {
-    if (!clientMac) return;
+    const resumeToken = getResumeToken();
+    if (!clientMac && !resumeToken) return;
     try {
-      const { ok, data } = await call('portal-resume-session', { clientMac });
-      if (!ok || !data || !data.active || !data.voucher) return;
+      const { ok, data } = await call('portal-resume-session', { clientMac, resumeToken });
+      if (!ok || !data || !data.active || !data.voucher) {
+        // If token existed but backend says it's dead (expired voucher), stop replaying it.
+        if (resumeToken && data && data.active === false) clearResumeToken();
+        return;
+      }
       connectedPackageLabel = data.packageType === '24hour' ? '24-Hour Package' : '2-Hour Package';
       const r = await omadaVoucherAuth(data.voucher);
       if (r.ok) showConnected(connectedPackageLabel, r.result);
