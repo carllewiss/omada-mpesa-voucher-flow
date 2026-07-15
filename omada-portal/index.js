@@ -294,15 +294,15 @@
 
   function pollPayment(checkoutRequestId) {
     let attempts = 0;
-    let stkQueryFired = false;
+    // Fail-safe schedule: attempts fire every 2.5s.
+    // Query Safaricom directly at ~15s / 30s / 45s / 60s / 75s so we never
+    // sit on a "pending" that only failed because the async callback got lost.
+    const stkQueryAt = new Set([6, 12, 18, 24, 30]);
     pollInterval = setInterval(async () => {
       attempts += 1;
-      // Fail-safe: at ~58s (attempt 23 × 2.5s), if the M-Pesa async callback
-      // hasn't arrived yet, ask Safaricom directly via STK Push Query.
-      // The edge function updates the transaction row, so the next poll tick
-      // picks up the result through the normal path.
-      if (!stkQueryFired && attempts === 23) {
-        stkQueryFired = true;
+      if (stkQueryAt.has(attempts)) {
+        // Fire-and-forget; the edge function writes the terminal status to
+        // the transactions row, so the next poll tick picks it up.
         call('mpesa-stk-query', { checkoutRequestId }).catch(() => {});
       }
       const { ok, data } = await call('portal-mpesa-poll', { checkoutRequestId, clientMac });
