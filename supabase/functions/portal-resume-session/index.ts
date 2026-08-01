@@ -41,9 +41,31 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
+    // Fire-and-forget audit logger (never blocks the resume path)
+    const logEvent = (row: Record<string, unknown>) => {
+      try {
+        supabase.from('session_events').insert(row).then(
+          () => {},
+          (e: unknown) => console.error('[session_events] insert failed', e),
+        );
+      } catch (e) {
+        console.error('[session_events] logger error', e);
+      }
+    };
+
     // LAYER 2 — Silent token resume (handles MAC randomization). Package-duration bound.
     if (resumeToken && typeof resumeToken === 'string' && resumeToken.length >= 20) {
       const hash = await sha256Hex(resumeToken);
+
+      // Capture the MAC the voucher was last seen on, so we can detect randomization.
+      const { data: prior } = await supabase
+        .from('vouchers')
+        .select('code, used_by_mac, resume_token_macs, package_type, duration_hours, transaction_id')
+        .eq('resume_token_hash', hash)
+        .maybeSingle();
+      const previousMac: string | null = prior?.used_by_mac ?? null;
+      const isNewDevice = !!(clientMac && prior && !(prior.resume_token_macs || []).includes(clientMac));
+
       const { data: t } = await supabase.rpc('resume_session_by_token', {
         _token_hash: hash,
         _client_mac: clientMac || null,
@@ -53,6 +75,31 @@ Deno.serve(async (req) => {
         const paidAt = new Date(trow.paid_at).getTime();
         const expiresAt = paidAt + (trow.duration_hours || 2) * 60 * 60 * 1000;
         if (expiresAt > Date.now()) {
+          if (isNewDevice && previousMac && previousMac !== clientMac) {
+            console.log('[mac-change]', { previousMac, clientMac, voucher: trow.voucher_code });
+            logEvent({
+              event_type: 'mac_randomization_detected',
+              voucher_code: trow.voucher_code,
+              package_type: trow.package_type,
+              duration_hours: trow.duration_hours,
+              client_mac: clientMac || null,
+              previous_mac: previousMac,
+              resume_source: 'token',
+              outcome: 'resumed',
+              details: { paid_at: trow.paid_at, expires_at: new Date(expiresAt).toISOString() },
+            });
+          }
+          logEvent({
+            event_type: 'voucher_resubmitted',
+            voucher_code: trow.voucher_code,
+            package_type: trow.package_type,
+            duration_hours: trow.duration_hours,
+            client_mac: clientMac || null,
+            previous_mac: previousMac,
+            resume_source: 'token',
+            outcome: 'active',
+            details: { new_device: isNewDevice, expires_at: new Date(expiresAt).toISOString() },
+          });
           return new Response(JSON.stringify({
             active: true,
             voucher: trow.voucher_code,
@@ -62,6 +109,16 @@ Deno.serve(async (req) => {
             expiresAt: new Date(expiresAt).toISOString(),
             source: 'token',
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        } else {
+          logEvent({
+            event_type: 'resume_expired',
+            voucher_code: trow.voucher_code,
+            package_type: trow.package_type,
+            duration_hours: trow.duration_hours,
+            client_mac: clientMac || null,
+            resume_source: 'token',
+            outcome: 'expired',
+          });
         }
       }
     }
@@ -86,10 +143,33 @@ Deno.serve(async (req) => {
     const paidAt = new Date(row.paid_at).getTime();
     const expiresAt = paidAt + (row.duration_hours || 2) * 60 * 60 * 1000;
     if (expiresAt < Date.now()) {
+      logEvent({
+        event_type: 'resume_expired',
+        voucher_code: row.voucher_code,
+        package_type: row.package_type,
+        duration_hours: row.duration_hours,
+        client_mac: clientMac,
+        transaction_id: row.transaction_id || null,
+        resume_source: 'mac',
+        outcome: 'expired',
+      });
       return new Response(JSON.stringify({ active: false }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    logEvent({
+      event_type: 'voucher_resubmitted',
+      voucher_code: row.voucher_code,
+      package_type: row.package_type,
+      duration_hours: row.duration_hours,
+      transaction_id: row.transaction_id || null,
+      client_mac: clientMac,
+      previous_mac: clientMac,
+      resume_source: 'mac',
+      outcome: 'active',
+      details: { expires_at: new Date(expiresAt).toISOString() },
+    });
 
     return new Response(JSON.stringify({
       active: true,
