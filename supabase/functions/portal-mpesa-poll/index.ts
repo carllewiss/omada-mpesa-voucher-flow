@@ -107,6 +107,19 @@ Deno.serve(async (req) => {
 
       const v = claimed[0];
 
+      // Accounting log: first issuance of this voucher for this transaction.
+      supabase.from('session_events').insert({
+        event_type: 'voucher_issued',
+        voucher_code: v.code,
+        package_type: v.package_type,
+        duration_hours: v.duration_hours,
+        transaction_id: tx.id,
+        checkout_request_id: checkoutRequestId,
+        client_mac: clientMac || null,
+        outcome: 'issued',
+        details: { source: 'mpesa_poll' },
+      }).then(() => {}, (e: unknown) => console.error('[session_events] insert failed', e));
+
       // Layer 2 — mint silent resume token bound to this voucher row.
       const minted = await mintResumeToken();
       await supabase.from('vouchers')
