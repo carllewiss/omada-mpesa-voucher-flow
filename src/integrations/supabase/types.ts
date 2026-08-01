@@ -92,6 +92,54 @@ export type Database = {
         }
         Relationships: []
       }
+      session_events: {
+        Row: {
+          checkout_request_id: string | null
+          client_mac: string | null
+          created_at: string
+          details: Json | null
+          duration_hours: number | null
+          event_type: string
+          id: string
+          outcome: string | null
+          package_type: string | null
+          previous_mac: string | null
+          resume_source: string | null
+          transaction_id: string | null
+          voucher_code: string | null
+        }
+        Insert: {
+          checkout_request_id?: string | null
+          client_mac?: string | null
+          created_at?: string
+          details?: Json | null
+          duration_hours?: number | null
+          event_type: string
+          id?: string
+          outcome?: string | null
+          package_type?: string | null
+          previous_mac?: string | null
+          resume_source?: string | null
+          transaction_id?: string | null
+          voucher_code?: string | null
+        }
+        Update: {
+          checkout_request_id?: string | null
+          client_mac?: string | null
+          created_at?: string
+          details?: Json | null
+          duration_hours?: number | null
+          event_type?: string
+          id?: string
+          outcome?: string | null
+          package_type?: string | null
+          previous_mac?: string | null
+          resume_source?: string | null
+          transaction_id?: string | null
+          voucher_code?: string | null
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
