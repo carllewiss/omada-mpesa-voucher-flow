@@ -123,6 +123,45 @@
     }
   }
 
+
+  // ---------- Voucher reveal (6 minutes after confirmed payment) ----------
+  // Server-decided: only rendered when the backend returns a confirmed
+  // paid_at timestamp. Hides itself the moment the window closes.
+  const REVEAL_WINDOW_MS = 6 * 60 * 1000;
+  let revealInterval = null;
+
+  function showVoucherReveal(code, paidAtIso) {
+    if (!code || !paidAtIso) return;
+    const paidAt = new Date(paidAtIso).getTime();
+    if (!paidAt || Number.isNaN(paidAt)) return;
+    if (Date.now() - paidAt >= REVEAL_WINDOW_MS) return;
+
+    const card = $('reveal-card');
+    $('reveal-code').textContent = code;
+    card.style.display = '';
+
+    const tick = () => {
+      const left = REVEAL_WINDOW_MS - (Date.now() - paidAt);
+      if (left <= 0) {
+        clearInterval(revealInterval); revealInterval = null;
+        card.style.display = 'none';
+        return;
+      }
+      const m = Math.floor(left / 60000);
+      const sec = Math.floor((left % 60000) / 1000);
+      $('reveal-timer').textContent = m + ':' + String(sec).padStart(2, '0');
+    };
+    tick();
+    if (revealInterval) clearInterval(revealInterval);
+    revealInterval = setInterval(tick, 1000);
+
+    $('reveal-copy').onclick = async () => {
+      try { await navigator.clipboard.writeText(code); $('reveal-copy').textContent = 'Copied'; }
+      catch { $('reveal-copy').textContent = 'Copy failed'; }
+      setTimeout(() => { $('reveal-copy').textContent = 'Copy'; }, 1800);
+    };
+  }
+
   // ---------- Overlays ----------
   let countdownInterval = null;
   let pollInterval = null;
@@ -311,6 +350,7 @@
         clearInterval(pollInterval); pollInterval = null;
         if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
         if (data.resumeToken) setResumeToken(data.resumeToken);
+        showVoucherReveal(data.voucher, data.paidAt);
         showSuccessThenAuth(data.voucher);
       } else if (data.status === 'failed') {
         stopPaymentFlow();
@@ -346,6 +386,7 @@
         return;
       }
       connectedPackageLabel = data.packageType === '24hour' ? '24-Hour Package' : '2-Hour Package';
+      showVoucherReveal(data.voucher, data.paidAt);
       const r = await omadaVoucherAuth(data.voucher);
       if (r.ok) showConnected(connectedPackageLabel, r.result);
     } catch (_) { /* silent */ }
