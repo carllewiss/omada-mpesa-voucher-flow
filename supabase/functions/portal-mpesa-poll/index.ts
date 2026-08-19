@@ -87,6 +87,7 @@ Deno.serve(async (req) => {
           status: 'success', voucher: code,
           durationHours: existingAuth.duration_hours,
           packageType: existingAuth.package_type,
+          paidAt: tx.updated_at || tx.created_at || new Date().toISOString(),
           resumeToken,
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
@@ -141,6 +142,7 @@ Deno.serve(async (req) => {
         voucher: v.code,
         durationHours: v.duration_hours,
         packageType: v.package_type,
+        paidAt: tx.updated_at || tx.created_at || new Date().toISOString(),
         resumeToken: minted.token,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }

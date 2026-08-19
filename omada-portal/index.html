@@ -76,6 +76,21 @@
       </div>
     </section>
 
+    <!-- Voucher reveal: shown ONLY when the backend confirms payment, and only
+         for the first 6 minutes after paid_at. Fail-safe if auto-connect fails. -->
+    <section id="reveal-card" class="card reveal" style="display:none">
+      <div class="reveal-head">
+        <span class="reveal-badge">PAYMENT CONFIRMED</span>
+        <span class="reveal-timer">Visible for <strong id="reveal-timer">6:00</strong></span>
+      </div>
+      <p class="reveal-label">Your voucher code</p>
+      <div class="reveal-code-row">
+        <code id="reveal-code">—</code>
+        <button id="reveal-copy" type="button">Copy</button>
+      </div>
+      <p class="reveal-note">Keep this safe. If you get disconnected, enter it in the voucher box above to reconnect.</p>
+    </section>
+
     <section class="card small">
       <h2>How it works</h2>
       <ol class="steps">
