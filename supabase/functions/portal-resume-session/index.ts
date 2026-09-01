@@ -26,6 +26,38 @@ function normalizePhone(p: string): string {
   return f;
 }
 
+
+// ---- Anti-sharing gate (server-side) ----
+// The reveal card is only permitted when:
+//   a) payment was confirmed within the last 6 minutes, AND
+//   b) the voucher shows no sharing abuse (< 3 distinct MACs seen for it).
+const REVEAL_WINDOW_MS = 6 * 60 * 1000;
+async function revealAllowedFor(supabase: any, code: string, paidAtIso: string | null): Promise<boolean> {
+  if (!code || !paidAtIso) return false;
+  const paidAt = new Date(paidAtIso).getTime();
+  if (!paidAt || Number.isNaN(paidAt)) return false;
+  if (Date.now() - paidAt >= REVEAL_WINDOW_MS) return false;
+  try {
+    const { data } = await supabase
+      .from('session_events')
+      .select('client_mac')
+      .eq('voucher_code', code)
+      .not('client_mac', 'is', null)
+      .limit(200);
+    const macs = new Set((data || []).map((r: any) => r.client_mac));
+    if (macs.size >= 3) {
+      supabase.from('session_events').insert({
+        event_type: 'voucher_share_suspected',
+        voucher_code: code,
+        outcome: 'reveal_blocked',
+        details: { distinct_macs: macs.size },
+      }).then(() => {}, () => {});
+      return false;
+    }
+  } catch (_) { /* fail open on logging errors only */ }
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
@@ -106,6 +138,7 @@ Deno.serve(async (req) => {
             packageType: trow.package_type,
             durationHours: trow.duration_hours,
             paidAt: trow.paid_at,
+            revealAllowed: await revealAllowedFor(supabase, trow.voucher_code, trow.paid_at),
             expiresAt: new Date(expiresAt).toISOString(),
             source: 'token',
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -177,6 +210,7 @@ Deno.serve(async (req) => {
       packageType: row.package_type,
       durationHours: row.duration_hours,
       paidAt: row.paid_at,
+      revealAllowed: await revealAllowedFor(supabase, row.voucher_code, row.paid_at),
       expiresAt: new Date(expiresAt).toISOString(),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
