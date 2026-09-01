@@ -124,17 +124,34 @@
   }
 
 
-  // ---------- Voucher reveal (6 minutes after confirmed payment) ----------
-  // Server-decided: only rendered when the backend returns a confirmed
-  // paid_at timestamp. Hides itself the moment the window closes.
+  // ---------- Voucher reveal (conditional, 6 minutes after confirmed payment) ----------
+  // Anti-sharing model:
+  //  (1) Vouchers are limited to 1 device in Omada, so a shared code is rejected.
+  //  (2) CONDITIONAL: the card is only rendered if auto-authentication FAILED.
+  //      A customer who connects normally never sees the code at all.
+  //  (4) SERVER-GATED: the backend must return revealAllowed === true. It refuses
+  //      outside the 6-minute window and when the code shows sharing abuse.
   const REVEAL_WINDOW_MS = 6 * 60 * 1000;
   let revealInterval = null;
+  let pendingReveal = null; // { code, paidAt, allowed } — only shown if auto-auth fails
+
+  function armVoucherReveal(code, paidAtIso, allowed) {
+    pendingReveal = allowed && code && paidAtIso ? { code, paidAtIso } : null;
+  }
+
+  function revealIfArmed() {
+    if (!pendingReveal) return;
+    const { code, paidAtIso } = pendingReveal;
+    pendingReveal = null;
+    showVoucherReveal(code, paidAtIso);
+  }
 
   function showVoucherReveal(code, paidAtIso) {
     if (!code || !paidAtIso) return;
     const paidAt = new Date(paidAtIso).getTime();
     if (!paidAt || Number.isNaN(paidAt)) return;
     if (Date.now() - paidAt >= REVEAL_WINDOW_MS) return;
+
 
     const card = $('reveal-card');
     $('reveal-code').textContent = code;
