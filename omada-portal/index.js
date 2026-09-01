@@ -409,6 +409,7 @@
       armVoucherReveal(data.voucher, data.paidAt, data.revealAllowed);
       const r = await omadaVoucherAuth(data.voucher);
       if (r.ok) showConnected(connectedPackageLabel, r.result);
+      else revealIfArmed();
     } catch (_) { /* silent */ }
   })();
 
