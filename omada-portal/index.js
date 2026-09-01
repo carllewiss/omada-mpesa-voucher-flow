@@ -235,7 +235,8 @@
 
       if (attempt >= MAX_SWAPS || !activeCheckoutRequestId) {
         hideOverlay('success-overlay');
-        setHint('Could not connect you automatically. Please contact support — your payment is safe.');
+        revealIfArmed();
+        setHint('Could not connect you automatically. Use the code shown below to log in manually.');
         return;
       }
 
@@ -249,11 +250,13 @@
 
       if (!ok || data.status !== 'success' || !data.voucher) {
         hideOverlay('success-overlay');
-        setHint('Could not connect you automatically. Please contact support — your payment is safe.');
+        revealIfArmed();
+        setHint('Could not connect you automatically. Use the code shown below to log in manually.');
         return;
       }
 
       currentCode = data.voucher;
+      if (pendingReveal) pendingReveal.code = currentCode;
       $('success-code').textContent = currentCode;
     }
   }
@@ -367,7 +370,7 @@
         clearInterval(pollInterval); pollInterval = null;
         if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
         if (data.resumeToken) setResumeToken(data.resumeToken);
-        showVoucherReveal(data.voucher, data.paidAt);
+        armVoucherReveal(data.voucher, data.paidAt, data.revealAllowed);
         showSuccessThenAuth(data.voucher);
       } else if (data.status === 'failed') {
         stopPaymentFlow();
@@ -403,7 +406,7 @@
         return;
       }
       connectedPackageLabel = data.packageType === '24hour' ? '24-Hour Package' : '2-Hour Package';
-      showVoucherReveal(data.voucher, data.paidAt);
+      armVoucherReveal(data.voucher, data.paidAt, data.revealAllowed);
       const r = await omadaVoucherAuth(data.voucher);
       if (r.ok) showConnected(connectedPackageLabel, r.result);
     } catch (_) { /* silent */ }
