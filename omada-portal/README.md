@@ -45,3 +45,16 @@ constants at the top of `index.js`:
 const SUPABASE_URL = '...';
 const SUPABASE_ANON_KEY = '...';
 ```
+## Anti-sharing model (voucher reveal)
+
+1. **Device limit (controller side)** — In Omada → Voucher Groups, set **Limit
+   number of users = 1** for every group used by the portal. A shared code is
+   then rejected for a second phone, which makes sharing pointless.
+2. **Conditional reveal** — The 6-minute code card is now shown **only when
+   automatic authentication fails**. Customers who connect normally never see
+   the code at all.
+3. **Server-side gate** — `portal-mpesa-poll` and `portal-resume-session`
+   decide reveal permission (`revealAllowed`). They refuse outside the
+   6-minute window from confirmed payment, and refuse when a voucher has been
+   seen on 3+ distinct MACs (logged as `voucher_share_suspected` in
+   `session_events`).
