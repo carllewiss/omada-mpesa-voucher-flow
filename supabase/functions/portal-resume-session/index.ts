@@ -138,6 +138,7 @@ Deno.serve(async (req) => {
             packageType: trow.package_type,
             durationHours: trow.duration_hours,
             paidAt: trow.paid_at,
+            revealAllowed: await revealAllowedFor(supabase, trow.voucher_code, trow.paid_at),
             expiresAt: new Date(expiresAt).toISOString(),
             source: 'token',
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -209,6 +210,7 @@ Deno.serve(async (req) => {
       packageType: row.package_type,
       durationHours: row.duration_hours,
       paidAt: row.paid_at,
+      revealAllowed: await revealAllowedFor(supabase, row.voucher_code, row.paid_at),
       expiresAt: new Date(expiresAt).toISOString(),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
