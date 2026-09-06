@@ -1,5 +1,11 @@
 project_id = "tyqcalkdvsmeczbbqfns"
 
+[functions.mpesa-callback]
+verify_jwt = false
+
+[functions.mpesa-reconcile]
+verify_jwt = false
+
 [functions.portal-mpesa-initiate]
 verify_jwt = false
 
