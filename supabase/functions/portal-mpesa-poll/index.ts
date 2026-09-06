@@ -92,94 +92,106 @@ Deno.serve(async (req) => {
     }
 
     if (tx.status === 'success' || tx.status === 'paid') {
-      // If a voucher was already issued for this transaction, return it (idempotent)
-      const { data: existingAuth } = await supabase
-        .from('client_authorizations')
-        .select('mpesa_receipt, package_type, duration_hours')
-        .eq('checkout_request_id', checkoutRequestId)
+      const paidAtIso = tx.updated_at || tx.created_at || new Date().toISOString();
+
+      // The voucher is normally issued server-side the moment payment is confirmed
+      // (mpesa-callback / stk-query / reconcile). Claim here only as a last resort.
+      let code: string | null = tx.voucher_code || null;
+      let durationHours: number | null = null;
+      let packageType: string | null = tx.package_type || null;
+
+      if (!code) {
+        const { data: existingAuth } = await supabase
+          .from('client_authorizations')
+          .select('mpesa_receipt, package_type, duration_hours')
+          .eq('checkout_request_id', checkoutRequestId)
+          .maybeSingle();
+        if (existingAuth?.mpesa_receipt?.startsWith('VC-')) {
+          code = existingAuth.mpesa_receipt.substring(3);
+          durationHours = existingAuth.duration_hours;
+          packageType = existingAuth.package_type;
+        }
+      }
+
+      if (!code) {
+        const { data: claimed, error: claimErr } = await supabase
+          .rpc('claim_voucher_for_transaction', {
+            _transaction_id: tx.id,
+            _package_type: tx.package_type,
+            _client_mac: clientMac || null,
+          });
+
+        if (claimErr || !claimed || claimed.length === 0) {
+          return new Response(JSON.stringify({
+            status: 'no_voucher',
+            error: 'Payment received but no vouchers available. Please contact support.',
+          }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const v = claimed[0];
+        code = v.code;
+        durationHours = v.duration_hours;
+        packageType = v.package_type;
+
+        await supabase
+          .from('client_authorizations')
+          .update({
+            payment_status: 'paid',
+            mpesa_receipt: `VC-${v.code}`,
+            mac_address: clientMac || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('checkout_request_id', checkoutRequestId);
+
+        supabase.from('session_events').insert({
+          event_type: 'voucher_issued',
+          voucher_code: v.code,
+          package_type: v.package_type,
+          duration_hours: v.duration_hours,
+          transaction_id: tx.id,
+          checkout_request_id: checkoutRequestId,
+          client_mac: clientMac || null,
+          outcome: 'issued',
+          details: { source: 'mpesa_poll' },
+        }).then(() => {}, (e: unknown) => console.error('[session_events] insert failed', e));
+      }
+
+      // Fill in package details + bind the voucher to this device / transaction
+      const { data: vrow } = await supabase
+        .from('vouchers')
+        .select('id, duration_hours, package_type, resume_token_hash, used_by_mac, transaction_id')
+        .eq('code', code)
         .maybeSingle();
 
-      if (existingAuth?.mpesa_receipt && existingAuth.mpesa_receipt.startsWith('VC-')) {
-        const code = existingAuth.mpesa_receipt.substring(3);
-        // Idempotent path: only mint a resume token if the voucher doesn't already have one.
-        let resumeToken: string | null = null;
-        const { data: vrow } = await supabase
-          .from('vouchers')
-          .select('id, resume_token_hash')
-          .eq('code', code)
-          .maybeSingle();
-        if (vrow && !vrow.resume_token_hash) {
-          const minted = await mintResumeToken();
-          await supabase.from('vouchers')
-            .update({ resume_token_hash: minted.hash })
-            .eq('id', vrow.id);
-          resumeToken = minted.token;
-        }
-        const paidAtIso = tx.updated_at || tx.created_at || new Date().toISOString();
-        return new Response(JSON.stringify({
-          status: 'success', voucher: code,
-          durationHours: existingAuth.duration_hours,
-          packageType: existingAuth.package_type,
-          paidAt: paidAtIso,
-          revealAllowed: await revealAllowedFor(supabase, code, paidAtIso),
-          resumeToken,
-        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (vrow) {
+        durationHours = durationHours ?? vrow.duration_hours;
+        packageType = packageType ?? vrow.package_type;
+        const patch: Record<string, unknown> = {};
+        if (!vrow.used_by_mac && clientMac) patch.used_by_mac = clientMac;
+        if (!vrow.transaction_id) patch.transaction_id = tx.id;
+        if (Object.keys(patch).length) await supabase.from('vouchers').update(patch).eq('id', vrow.id);
       }
 
-      // Atomically claim ONE unused voucher for this package
-      const { data: claimed, error: claimErr } = await supabase
-        .rpc('claim_voucher_for_package', {
-          _package_type: tx.package_type,
-          _client_mac: clientMac || null,
-        });
-
-      if (claimErr || !claimed || claimed.length === 0) {
-        return new Response(JSON.stringify({
-          status: 'no_voucher',
-          error: 'Payment received but no vouchers available. Please contact support.',
-        }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      // Layer 2 — silent resume token (mint once per voucher)
+      let resumeToken: string | null = null;
+      if (vrow && !vrow.resume_token_hash) {
+        const minted = await mintResumeToken();
+        await supabase.from('vouchers').update({ resume_token_hash: minted.hash }).eq('id', vrow.id);
+        resumeToken = minted.token;
       }
 
-      const v = claimed[0];
+      if (!tx.voucher_code) {
+        await supabase.from('transactions').update({ voucher_code: code }).eq('id', tx.id);
+      }
 
-      // Accounting log: first issuance of this voucher for this transaction.
-      supabase.from('session_events').insert({
-        event_type: 'voucher_issued',
-        voucher_code: v.code,
-        package_type: v.package_type,
-        duration_hours: v.duration_hours,
-        transaction_id: tx.id,
-        checkout_request_id: checkoutRequestId,
-        client_mac: clientMac || null,
-        outcome: 'issued',
-        details: { source: 'mpesa_poll' },
-      }).then(() => {}, (e: unknown) => console.error('[session_events] insert failed', e));
-
-      // Layer 2 — mint silent resume token bound to this voucher row.
-      const minted = await mintResumeToken();
-      await supabase.from('vouchers')
-        .update({ resume_token_hash: minted.hash })
-        .eq('code', v.code);
-
-      await supabase
-        .from('client_authorizations')
-        .update({
-          payment_status: 'paid',
-          mpesa_receipt: `VC-${v.code}`,
-          mac_address: clientMac || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('checkout_request_id', checkoutRequestId);
-
-      const paidAtIso = tx.updated_at || tx.created_at || new Date().toISOString();
       return new Response(JSON.stringify({
         status: 'success',
-        voucher: v.code,
-        durationHours: v.duration_hours,
-        packageType: v.package_type,
+        voucher: code,
+        durationHours,
+        packageType,
         paidAt: paidAtIso,
-        revealAllowed: await revealAllowedFor(supabase, v.code, paidAtIso),
-        resumeToken: minted.token,
+        revealAllowed: await revealAllowedFor(supabase, code!, paidAtIso),
+        resumeToken,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

@@ -128,8 +128,8 @@ Deno.serve(async (req) => {
 
     const resultCode = String(q.ResultCode ?? '');
     if (resultCode === '0') {
-      // Mirror mpesa-callback: mark success. The next portal-mpesa-poll tick
-      // will claim a voucher and return it to the customer.
+      // Mirror mpesa-callback: mark success AND issue the voucher immediately,
+      // so the customer is served even if their browser never polls again.
       await supabase
         .from('transactions')
         .update({
@@ -140,6 +140,34 @@ Deno.serve(async (req) => {
         })
         .eq('checkout_request_id', checkoutRequestId);
 
+      let voucher: string | null = null;
+      if (tx?.id) {
+        const { data: claimed } = await supabase.rpc('claim_voucher_for_transaction', {
+          _transaction_id: tx.id,
+          _package_type: tx.package_type,
+          _client_mac: tx.client_mac || null,
+        });
+        if (claimed?.length) {
+          voucher = claimed[0].code;
+          await supabase.from('client_authorizations').update({
+            payment_status: 'paid',
+            mpesa_receipt: `VC-${voucher}`,
+            updated_at: new Date().toISOString(),
+          }).eq('checkout_request_id', checkoutRequestId);
+          logEvent({
+            event_type: 'voucher_issued',
+            voucher_code: voucher,
+            package_type: claimed[0].package_type,
+            duration_hours: claimed[0].duration_hours,
+            transaction_id: tx.id,
+            checkout_request_id: checkoutRequestId,
+            client_mac: tx.client_mac ?? null,
+            outcome: 'issued',
+            details: { source: 'stk_query' },
+          });
+        }
+      }
+
       logEvent({
         event_type: 'stk_query_fallback',
         checkout_request_id: checkoutRequestId,
@@ -147,10 +175,10 @@ Deno.serve(async (req) => {
         package_type: tx?.package_type ?? null,
         client_mac: tx?.client_mac ?? null,
         outcome: 'confirmed_paid',
-        details: { resultCode: 0, resultDesc: q.ResultDesc ?? null, source: 'stk_query' },
+        details: { resultCode: 0, resultDesc: q.ResultDesc ?? null, source: 'stk_query', voucher },
       });
 
-      return new Response(JSON.stringify({ status: 'success', source: 'stk_query' }), {
+      return new Response(JSON.stringify({ status: 'success', source: 'stk_query', voucher }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
