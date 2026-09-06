@@ -309,6 +309,18 @@ export type Database = {
           package_type: string
         }[]
       }
+      claim_voucher_for_transaction: {
+        Args: {
+          _client_mac?: string
+          _package_type: string
+          _transaction_id: string
+        }
+        Returns: {
+          code: string
+          duration_hours: number
+          package_type: string
+        }[]
+      }
       confirm_voucher_used: {
         Args: { _client_mac: string; _transaction_id: string }
         Returns: boolean

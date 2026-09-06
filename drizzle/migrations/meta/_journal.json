@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788701855621,
+      "tag": "0000_claim_voucher_for_transaction_and_backfill",
+      "breakpoints": true
+    }
+  ]
+}
