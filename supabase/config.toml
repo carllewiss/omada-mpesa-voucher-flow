@@ -23,3 +23,12 @@ verify_jwt = false
 
 [functions.portal-swap-voucher]
 verify_jwt = false
+
+[functions.pending-authorizations]
+verify_jwt = false
+
+[functions.update-authorization]
+verify_jwt = false
+
+[functions.mpesa-status]
+verify_jwt = false
