@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>4K SMART SOLUTIONS — Sales Dashboard</title>
+<meta name="description" content="Daily, weekly and monthly WiFi sales dashboard for 4K SMART SOLUTIONS." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>4K SMART SOLUTIONS</h1>
+    <p class="sub">Sales dashboard <span id="tz">EAT (UTC+3)</span></p>
+  </div>
+  <div class="actions">
+    <span id="updated" class="updated">—</span>
+    <button id="refresh" type="button">Refresh</button>
+  </div>
+</header>
+
+<main>
+  <section class="cards" aria-label="Sales summary">
+    <article class="card"><h2>Today</h2><p class="amount" id="kpi-today">—</p><p class="meta" id="kpi-today-c">—</p></article>
+    <article class="card"><h2>Yesterday</h2><p class="amount" id="kpi-yest">—</p><p class="meta" id="kpi-yest-c">—</p></article>
+    <article class="card"><h2>This week</h2><p class="amount" id="kpi-week">—</p><p class="meta" id="kpi-week-c">—</p></article>
+    <article class="card"><h2>This month</h2><p class="amount" id="kpi-month">—</p><p class="meta" id="kpi-month-c">—</p></article>
+    <article class="card"><h2>All time</h2><p class="amount" id="kpi-all">—</p><p class="meta" id="kpi-all-c">—</p></article>
+  </section>
+
+  <section class="panel">
+    <h2>Last 30 days</h2>
+    <canvas id="chart-daily" height="90"></canvas>
+  </section>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>Last 12 weeks</h2>
+      <canvas id="chart-weekly" height="150"></canvas>
+    </section>
+    <section class="panel">
+      <h2>Last 12 months</h2>
+      <canvas id="chart-monthly" height="150"></canvas>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>Sales by package (this month)</h2>
+      <table id="pkg-table"><thead><tr><th>Package</th><th>Count</th><th class="r">Revenue</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section class="panel">
+      <h2>Latest payments</h2>
+      <table id="recent-table"><thead><tr><th>Time</th><th>Phone</th><th>Package</th><th class="r">Amount</th><th>Receipt</th></tr></thead><tbody></tbody></table>
+    </section>
+  </div>
+</main>
+
+<footer><p>Reads live data from the shared backend. Successful payments only.</p></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
