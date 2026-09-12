@@ -234,6 +234,7 @@
       }
 
       if (attempt >= MAX_SWAPS || !activeCheckoutRequestId) {
+        if (await serverSideAuthFallback()) return;
         hideOverlay('success-overlay');
         revealIfArmed();
         setHint('Could not connect you automatically. Use the code shown below to log in manually.');
@@ -249,11 +250,13 @@
       });
 
       if (!ok || data.status !== 'success' || !data.voucher) {
+        if (await serverSideAuthFallback()) return;
         hideOverlay('success-overlay');
         revealIfArmed();
         setHint('Could not connect you automatically. Use the code shown below to log in manually.');
         return;
       }
+
 
       currentCode = data.voucher;
       if (pendingReveal) pendingReveal.code = currentCode;
